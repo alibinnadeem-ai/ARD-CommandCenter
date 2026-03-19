@@ -306,7 +306,7 @@ const Login = ({ onLogin }) => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password: pass }),
       });
       if (res.ok) {
         const u = await res.json();
@@ -323,7 +323,7 @@ const Login = ({ onLogin }) => {
 
   const DEMOS = ["chairman","ceo","cfo","coo","cso","clo"].map(r=>({
     role:r.toUpperCase()==="CSO"?"CSO":r.toUpperCase()==="CLO"?"CLO":r.charAt(0).toUpperCase()+r.slice(1),
-    email:`${r}@ecc.com`
+    email:`${r}@ardcity.com`
   }));
 
   return (
@@ -343,7 +343,7 @@ const Login = ({ onLogin }) => {
         </div>
 
         <Card style={{ boxShadow:"0 24px 80px rgba(0,0,0,.6)" }}>
-          <Field label="Email" value={email} onChange={setEmail} type="email" placeholder="name@ecc.com" />
+          <Field label="Email" value={email} onChange={setEmail} type="email" placeholder="name@ardcity.com" />
           <Field label="Password" value={pass} onChange={setPass} type="password" placeholder="••••••••" />
           {error && <div style={{ color:C.red, fontSize:12, marginBottom:12, padding:"8px 12px", background:C.redDim, borderRadius:6, border:`1px solid ${C.red}30` }}>{error}</div>}
           <Btn full onClick={tryLogin} disabled={loading||!email}>{loading?"Authenticating…":"Sign In to Command Center"}</Btn>
@@ -362,7 +362,7 @@ const Login = ({ onLogin }) => {
               >{d.role}</button>
             ))}
           </div>
-          <div style={{ fontSize:10, color:C.textMuted, marginTop:7 }}>Click a role to prefill → Sign In (any password)</div>
+          <div style={{ fontSize:10, color:C.textMuted, marginTop:7 }}>Click a role to prefill → Sign In with password demo</div>
         </Card>
       </div>
     </div>
@@ -806,25 +806,35 @@ const AllDirectives = ({ directives, users, currentUser, onPick, onNew }) => {
 
 // ── CREATE DIRECTIVE ──────────────────────────
 const CreateDirective = ({ users, currentUser, onSave, onCancel }) => {
-  const [form, setForm] = useState({ title:"", description:"", assigned_to:"U002", dept:"Finance", priority:"Medium", deadline:"" });
+  const assignableUsers = users
+    .filter(u => u.user_id !== "System" && u.status === "Active")
+    .map(u => ({ value: u.user_id, label: `${u.name} (${u.role})` }));
+
+  const ceoUserId = users.find(u => u.role === "CEO" && u.status === "Active")?.user_id || "";
+
+  const [form, setForm] = useState({ title:"", description:"", assigned_to:ceoUserId, dept:"Finance", priority:"Medium", deadline:"" });
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
+  useEffect(() => {
+    const stillValid = assignableUsers.some(u => u.value === form.assigned_to);
+    if (!stillValid) {
+      f("assigned_to", assignableUsers[0]?.value || "");
+    }
+  }, [assignableUsers, form.assigned_to]);
+
   const submit = () => {
-    if (!form.title.trim()||!form.deadline) return;
+    if (!form.title.trim()||!form.deadline||!form.assigned_to) return;
     const DEPT_EXEC = { Finance:"U003", Strategy:"U004", Investment:"U005", Operations:"U006", Legal:"U007" };
     onSave({
       directive_id:"DIR-2026-"+String(Math.floor(Math.random()*900+100)),
       ...form, title:form.title.trim(), description:form.description.trim(),
       issued_by:currentUser.user_id,
-      delegated_to:form.assigned_to==="U002"?(DEPT_EXEC[form.dept]||form.assigned_to):form.assigned_to,
+      delegated_to:form.assigned_to===ceoUserId?(DEPT_EXEC[form.dept]||form.assigned_to):form.assigned_to,
       status:"New", progress:0,
       created:new Date().toISOString(),
       tasks:[], comments:[], attachments:[],
     });
   };
-
-  const execs = users.filter(u=>["CEO","CFO","CSO","CISO","COO","CLO"].includes(u.role))
-    .map(u=>({value:u.user_id, label:`${u.name} (${u.role})`}));
 
   return (
     <div>
@@ -834,14 +844,14 @@ const CreateDirective = ({ users, currentUser, onSave, onCancel }) => {
         <Field label="Directive Title" value={form.title} onChange={v=>f("title",v)} placeholder="Clear, action-oriented title…" required />
         <Field label="Description / Brief" value={form.description} onChange={v=>f("description",v)} as="textarea" placeholder="Detailed directive brief, expected outcomes, and context…" rows={4} />
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          <Field label="Assign To" value={form.assigned_to} onChange={v=>f("assigned_to",v)} as="select" options={execs} />
+          <Field label="Assign To" value={form.assigned_to} onChange={v=>f("assigned_to",v)} as="select" options={assignableUsers} />
           <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select" options={["Finance","Strategy","Investment","Operations","Legal"]} />
           <Field label="Priority" value={form.priority} onChange={v=>f("priority",v)} as="select" options={["High","Medium","Low"]} />
           <Field label="Deadline" value={form.deadline} onChange={v=>f("deadline",v)} type="date" required />
         </div>
         <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:6 }}>
           <Btn variant="secondary" onClick={onCancel}>Cancel</Btn>
-          <Btn onClick={submit} disabled={!form.title.trim()||!form.deadline} icon="📋">Issue Directive</Btn>
+          <Btn onClick={submit} disabled={!form.title.trim()||!form.deadline||!form.assigned_to} icon="📋">Issue Directive</Btn>
         </div>
       </Card>
     </div>
@@ -931,7 +941,7 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
   const [search, setSearch]     = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [form, setForm]         = useState({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"" });
+  const [form, setForm]         = useState({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"", password:"" });
   const [resetPwd, setResetPwd] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -947,13 +957,13 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
 
   const openAdd = () => {
     setTarget(null);
-    setForm({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"" });
+    setForm({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"", password:"" });
     setModal("add");
   };
 
   const openEdit = u => {
     setTarget(u);
-    setForm({ name:u.name, email:u.email, role:u.role, dept:u.dept, status:u.status, phone:u.phone||"" });
+    setForm({ name:u.name, email:u.email, role:u.role, dept:u.dept, status:u.status, phone:u.phone||"", password:"" });
     setModal("edit");
   };
 
@@ -962,7 +972,7 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
   const openReset = u => { setTarget(u); setResetPwd(""); setModal("reset"); };
 
   const saveUser = () => {
-    if (!form.name.trim()||!form.email.trim()) return;
+    if (!form.name.trim()||!form.email.trim()||form.password.trim().length<4) return;
     const newUser = { user_id:"U"+uid(), ...form, name:form.name.trim(), email:form.email.trim(), joined:new Date().toISOString().split("T")[0] };
     onUpdateUsers([...users, newUser]);
     logAction(currentUser.user_id, null, "user_created", null, form.email);
@@ -973,11 +983,27 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
 
   const updateUser = () => {
     if (!form.name.trim()||!form.email.trim()) return;
-    onUpdateUsers(users.map(u=>u.user_id===target.user_id?{...u,...form,name:form.name.trim(),email:form.email.trim()}:u));
+    if (form.password && form.password.trim().length < 4) return;
+
+    onUpdateUsers(users.map(u=>u.user_id===target.user_id
+      ? {...u,...form,name:form.name.trim(),email:form.email.trim(),password:form.password?form.password:u.password}
+      :u));
     logAction(currentUser.user_id, null, "user_updated", target.email, form.email);
+    if (form.password) {
+      logAction(currentUser.user_id, null, "password_reset", target.email, "password changed from edit");
+    }
     toast("User updated: "+form.name.trim());
     setModal(null);
-    fetch(`/api/users/${target.user_id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...form,name:form.name.trim(),email:form.email.trim()}) }).catch(console.error);
+    fetch(`/api/users/${target.user_id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        ...form,
+        name:form.name.trim(),
+        email:form.email.trim(),
+        newPassword: form.password ? form.password.trim() : undefined,
+      }),
+    }).catch(console.error);
   };
 
   const deleteUser = () => {
@@ -998,11 +1024,30 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
     fetch(`/api/users/${target.user_id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...target,status:newStatus}) }).catch(console.error);
   };
 
-  const doReset = () => {
+  const doReset = async () => {
     if (!resetPwd.trim()||resetPwd.length<4) return;
-    logAction(currentUser.user_id, null, "password_reset", target.email, "password changed");
-    toast("Password reset for "+target.name);
-    setModal(null);
+    try {
+      const res = await fetch(`/api/users/${target.user_id}`, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          ...target,
+          newPassword: resetPwd.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        toast("Could not reset password", "error");
+        return;
+      }
+
+      logAction(currentUser.user_id, null, "password_reset", target.email, "password changed");
+      toast("Password reset for "+target.name);
+      setModal(null);
+    } catch (error) {
+      console.error(error);
+      toast("Could not reset password", "error");
+    }
   };
 
   const closeModal = () => { setModal(null); setTarget(null); };
@@ -1060,14 +1105,18 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
                   <Tag color={C.blue}>{u.dept}</Tag>
                   <Tag color={u.status==="Active"?C.green:u.status==="Suspended"?C.red:C.textMuted}>{u.status}</Tag>
                 </div>
-                {isChairman&&!isSelf&&(
+                {isChairman&&(
                   <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                     <Btn variant="ghost" small onClick={()=>openEdit(u)} icon="✏️">Edit</Btn>
-                    <Btn variant="ghost" small onClick={()=>openReset(u)} icon="🔑">Reset</Btn>
-                    <Btn variant={u.status==="Suspended"?"success":"warn"} small onClick={()=>openSuspend(u)}>
-                      {u.status==="Suspended"?"Reinstate":"Suspend"}
-                    </Btn>
-                    {!isProtected&&<Btn variant="danger" small onClick={()=>openDelete(u)} icon="🗑️">Delete</Btn>}
+                    {!isSelf&&(
+                      <>
+                        <Btn variant="ghost" small onClick={()=>openReset(u)} icon="🔑">Reset</Btn>
+                        <Btn variant={u.status==="Suspended"?"success":"warn"} small onClick={()=>openSuspend(u)}>
+                          {u.status==="Suspended"?"Reinstate":"Suspend"}
+                        </Btn>
+                        {!isProtected&&<Btn variant="danger" small onClick={()=>openDelete(u)} icon="🗑️">Delete</Btn>}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1080,7 +1129,8 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
       {modal==="add"&&(
         <Modal title="Add New User" onClose={closeModal}>
           <Field label="Full Name"  value={form.name}   onChange={v=>f("name",v)}  placeholder="Full name" required />
-          <Field label="Email"      value={form.email}  onChange={v=>f("email",v)} type="email" placeholder="user@ecc.com" required />
+          <Field label="Email"      value={form.email}  onChange={v=>f("email",v)} type="email" placeholder="user@ardcity.com" required />
+          <Field label="Password (min 4 chars)" value={form.password} onChange={v=>f("password",v)} type="password" placeholder="Set initial password" required />
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} placeholder="+92-300-0000000" />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
@@ -1091,7 +1141,7 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
           <Field label="Status" value={form.status} onChange={v=>f("status",v)} as="select" options={["Active","Inactive"]} />
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <Btn variant="secondary" onClick={closeModal}>Cancel</Btn>
-            <Btn onClick={saveUser} disabled={!form.name.trim()||!form.email.trim()} icon="＋">Add User</Btn>
+            <Btn onClick={saveUser} disabled={!form.name.trim()||!form.email.trim()||form.password.trim().length<4} icon="＋">Add User</Btn>
           </div>
         </Modal>
       )}
@@ -1099,6 +1149,11 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
       {/* ── EDIT USER MODAL ── */}
       {modal==="edit"&&target&&(
         <Modal title={`Edit — ${target.name}`} onClose={closeModal}>
+          {target.user_id===currentUser.user_id&&(
+            <div style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", fontSize:11, color:C.textSub, marginBottom:12 }}>
+              You are editing your own chairman profile. Role, department, and status are locked.
+            </div>
+          )}
           <div style={{ display:"flex", gap:10, alignItems:"center", padding:"10px 14px", background:C.surfaceAlt, borderRadius:8, marginBottom:16, border:`1px solid ${C.border}` }}>
             <Avatar name={target.name} size={36} color={(ROLE_CONFIG[target.role]||ROLE_CONFIG.Team).color} />
             <div>
@@ -1108,17 +1163,18 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
           </div>
           <Field label="Full Name"  value={form.name}   onChange={v=>f("name",v)}  required />
           <Field label="Email"      value={form.email}  onChange={v=>f("email",v)} type="email" required />
+          <Field label="Set New Password (optional, min 4 chars)" value={form.password} onChange={v=>f("password",v)} type="password" placeholder="Leave blank to keep current password" />
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
-              options={["CEO","CFO","CSO","CISO","COO","CLO","Director","Team"]} />
+              options={["CEO","CFO","CSO","CISO","COO","CLO","Director","Team"]} disabled={target.user_id===currentUser.user_id} />
             <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select"
-              options={["Executive","Finance","Strategy","Investment","Operations","Legal"]} />
+              options={["Executive","Finance","Strategy","Investment","Operations","Legal"]} disabled={target.user_id===currentUser.user_id} />
           </div>
-          <Field label="Status" value={form.status} onChange={v=>f("status",v)} as="select" options={["Active","Inactive","Suspended"]} />
+          <Field label="Status" value={form.status} onChange={v=>f("status",v)} as="select" options={["Active","Inactive","Suspended"]} disabled={target.user_id===currentUser.user_id} />
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <Btn variant="secondary" onClick={closeModal}>Cancel</Btn>
-            <Btn onClick={updateUser} disabled={!form.name.trim()||!form.email.trim()} icon="✓">Save Changes</Btn>
+            <Btn onClick={updateUser} disabled={!form.name.trim()||!form.email.trim()||(form.password && form.password.trim().length<4)} icon="✓">Save Changes</Btn>
           </div>
         </Modal>
       )}
@@ -1251,6 +1307,10 @@ export default function ECCApp() {
   const [sidebar,     setSidebar]     = useState(true);
   const [toast,       setToast]       = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [pwdForm, setPwdForm] = useState({ current: "", next: "", confirm: "" });
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState("");
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg, type="success") => {
@@ -1313,6 +1373,59 @@ export default function ECCApp() {
     setView("dashboard");
     await loadData();
     showToast(`Welcome, ${u.name.split(" ")[0]}`);
+  };
+
+  const openChangePassword = () => {
+    setPwdForm({ current: "", next: "", confirm: "" });
+    setPwdError("");
+    setShowPwdModal(true);
+  };
+
+  const submitChangePassword = async () => {
+    if (!pwdForm.current || !pwdForm.next || !pwdForm.confirm) {
+      setPwdError("All fields are required.");
+      return;
+    }
+    if (pwdForm.next.length < 4) {
+      setPwdError("New password must be at least 4 characters.");
+      return;
+    }
+    if (pwdForm.next !== pwdForm.confirm) {
+      setPwdError("New password and confirmation do not match.");
+      return;
+    }
+    if (pwdForm.current === pwdForm.next) {
+      setPwdError("New password must be different from current password.");
+      return;
+    }
+
+    setPwdBusy(true);
+    setPwdError("");
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.user_id,
+          currentPassword: pwdForm.current,
+          newPassword: pwdForm.next,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPwdError(data.error || 'Password update failed.');
+        setPwdBusy(false);
+        return;
+      }
+
+      showToast('Password updated successfully');
+      setShowPwdModal(false);
+    } catch (error) {
+      console.error(error);
+      setPwdError('Password update failed. Please try again.');
+    }
+    setPwdBusy(false);
   };
 
   if (!user) return <Login onLogin={handleLogin} />;
@@ -1408,10 +1521,14 @@ export default function ECCApp() {
                   <RoleBadge role={user.role} />
                 </div>
               </div>
+              <button onClick={openChangePassword} style={{ width:"100%", background:"none", border:`1px solid ${C.border}`, color:C.textSub, padding:"6px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600, marginBottom:6 }}>Change Password</button>
               <button onClick={()=>setUser(null)} style={{ width:"100%", background:"none", border:`1px solid ${C.border}`, color:C.textSub, padding:"6px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600 }}>Sign Out</button>
             </div>
           ) : (
-            <button onClick={()=>setUser(null)} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>⏻</button>
+            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+              <button onClick={openChangePassword} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>🔑</button>
+              <button onClick={()=>setUser(null)} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>⏻</button>
+            </div>
           )}
         </div>
       </div>
@@ -1449,6 +1566,19 @@ export default function ECCApp() {
           onReadAll={()=>{ setNotifs(p=>p.map(n=>n.user_id===user.user_id?{...n,read:true}:n)); fetch('/api/notifications/read-all',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:user.user_id})}).catch(console.error); }}
           onClose={()=>setShowNotifs(false)}
         />
+      )}
+
+      {showPwdModal&&(
+        <Modal title="Change Your Password" onClose={()=>setShowPwdModal(false)}>
+          <Field label="Current Password" value={pwdForm.current} onChange={v=>setPwdForm(p=>({...p,current:v}))} type="password" required />
+          <Field label="New Password (min 4 chars)" value={pwdForm.next} onChange={v=>setPwdForm(p=>({...p,next:v}))} type="password" required />
+          <Field label="Confirm New Password" value={pwdForm.confirm} onChange={v=>setPwdForm(p=>({...p,confirm:v}))} type="password" required />
+          {pwdError&&<div style={{ color:C.red, fontSize:12, marginBottom:12, padding:"8px 12px", background:C.redDim, borderRadius:6, border:`1px solid ${C.red}30` }}>{pwdError}</div>}
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <Btn variant="secondary" onClick={()=>setShowPwdModal(false)}>Cancel</Btn>
+            <Btn onClick={submitChangePassword} disabled={pwdBusy} icon="🔑">{pwdBusy?"Updating...":"Update Password"}</Btn>
+          </div>
+        </Modal>
       )}
 
       {/* Toast */}

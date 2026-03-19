@@ -3,15 +3,15 @@
 // ═══════════════════════════════════════════════════════════════
 
 export const SEED_USERS = [
-  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ecc.com", password:"demo", role:"Chairman", dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
-  { user_id:"U002", name:"Dr. Nadia Qureshi",         email:"ceo@ecc.com",      password:"demo", role:"CEO",      dept:"Executive", status:"Active", joined:"2020-03-15", phone:"+92-300-0000002" },
-  { user_id:"U003", name:"Ahmed Al-Farsi",            email:"cfo@ecc.com",      password:"demo", role:"CFO",      dept:"Finance",   status:"Active", joined:"2021-01-10", phone:"+92-300-0000003" },
-  { user_id:"U004", name:"Priya Sharma",              email:"cso@ecc.com",      password:"demo", role:"CSO",      dept:"Strategy",  status:"Active", joined:"2021-04-20", phone:"+92-300-0000004" },
-  { user_id:"U005", name:"James Whitfield",           email:"ciso@ecc.com",     password:"demo", role:"CISO",     dept:"Investment",status:"Active", joined:"2021-06-01", phone:"+92-300-0000005" },
-  { user_id:"U006", name:"Tariq Mahmood",             email:"coo@ecc.com",      password:"demo", role:"COO",      dept:"Operations",status:"Active", joined:"2020-09-01", phone:"+92-300-0000006" },
-  { user_id:"U007", name:"Fatima Hassan",             email:"clo@ecc.com",      password:"demo", role:"CLO",      dept:"Legal",     status:"Active", joined:"2021-02-14", phone:"+92-300-0000007" },
-  { user_id:"U008", name:"Omar Khalil",               email:"dir.fin@ecc.com",  password:"demo", role:"Director", dept:"Finance",   status:"Active", joined:"2022-01-05", phone:"+92-300-0000008" },
-  { user_id:"U009", name:"Zara Ahmed",                email:"dir.ops@ecc.com",  password:"demo", role:"Director", dept:"Operations",status:"Active", joined:"2022-03-01", phone:"+92-300-0000009" },
+  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ardcity.com", password:"demo", role:"Chairman", dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
+  { user_id:"U002", name:"Dr. Nadia Qureshi",         email:"ceo@ardcity.com",      password:"demo", role:"CEO",      dept:"Executive", status:"Active", joined:"2020-03-15", phone:"+92-300-0000002" },
+  { user_id:"U003", name:"Ahmed Al-Farsi",            email:"cfo@ardcity.com",      password:"demo", role:"CFO",      dept:"Finance",   status:"Active", joined:"2021-01-10", phone:"+92-300-0000003" },
+  { user_id:"U004", name:"Priya Sharma",              email:"cso@ardcity.com",      password:"demo", role:"CSO",      dept:"Strategy",  status:"Active", joined:"2021-04-20", phone:"+92-300-0000004" },
+  { user_id:"U005", name:"James Whitfield",           email:"ciso@ardcity.com",     password:"demo", role:"CISO",     dept:"Investment",status:"Active", joined:"2021-06-01", phone:"+92-300-0000005" },
+  { user_id:"U006", name:"Tariq Mahmood",             email:"coo@ardcity.com",      password:"demo", role:"COO",      dept:"Operations",status:"Active", joined:"2020-09-01", phone:"+92-300-0000006" },
+  { user_id:"U007", name:"Fatima Hassan",             email:"clo@ardcity.com",      password:"demo", role:"CLO",      dept:"Legal",     status:"Active", joined:"2021-02-14", phone:"+92-300-0000007" },
+  { user_id:"U008", name:"Omar Khalil",               email:"dir.fin@ardcity.com",  password:"demo", role:"Director", dept:"Finance",   status:"Active", joined:"2022-01-05", phone:"+92-300-0000008" },
+  { user_id:"U009", name:"Zara Ahmed",                email:"dir.ops@ardcity.com",  password:"demo", role:"Director", dept:"Operations",status:"Active", joined:"2022-03-01", phone:"+92-300-0000009" },
 ];
 
 export const SEED_DIRECTIVES = [

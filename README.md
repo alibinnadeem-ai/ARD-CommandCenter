@@ -27,12 +27,12 @@ Open [http://localhost:3000](http://localhost:3000)
 
 | Role      | Email                  | Password |
 |-----------|------------------------|----------|
-| Chairman  | chairman@ecc.com       | demo     |
-| CEO       | ceo@ecc.com            | demo     |
-| CFO       | cfo@ecc.com            | demo     |
-| COO       | coo@ecc.com            | demo     |
-| CSO       | cso@ecc.com            | demo     |
-| CLO       | clo@ecc.com            | demo     |
+| Chairman  | chairman@ardcity.com       | demo     |
+| CEO       | ceo@ardcity.com            | demo     |
+| CFO       | cfo@ardcity.com            | demo     |
+| COO       | coo@ardcity.com            | demo     |
+| CSO       | cso@ardcity.com            | demo     |
+| CLO       | clo@ardcity.com            | demo     |
 
 ---
 
