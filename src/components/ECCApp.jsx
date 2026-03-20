@@ -370,13 +370,15 @@ const Login = ({ onLogin }) => {
 };
 
 // ── CHAIRMAN DASHBOARD ────────────────────────
-const ChairmanDash = ({ directives, users, onPick }) => {
+const ChairmanDash = ({ directives, users, departments, onPick }) => {
   const total     = directives.length;
   const active    = directives.filter(d=>!["Completed","Archived"].includes(d.status)).length;
   const completed = directives.filter(d=>d.status==="Completed").length;
   const overdue   = directives.filter(d=>d.status==="Overdue").length;
 
-  const deptRows = ["Finance","Strategy","Investment","Operations","Legal"].map(dept=>{
+  const deptPool = departments.length ? departments : [...new Set(directives.map(d => d.dept).filter(Boolean))];
+
+  const deptRows = deptPool.map(dept=>{
     const ds   = directives.filter(d=>d.dept===dept);
     const comp = ds.filter(d=>d.status==="Completed").length;
     const over = ds.filter(d=>d.status==="Overdue").length;
@@ -762,7 +764,7 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onBack,
 };
 
 // ── ALL DIRECTIVES ────────────────────────────
-const AllDirectives = ({ directives, users, currentUser, onPick, onNew }) => {
+const AllDirectives = ({ directives, users, currentUser, departments, onPick, onNew }) => {
   const [f, setF] = useState({ status:"", priority:"", dept:"", q:"" });
   const rc = ROLE_CONFIG[currentUser.role];
   const visible = directives.filter(d=>{
@@ -788,7 +790,7 @@ const AllDirectives = ({ directives, users, currentUser, onPick, onNew }) => {
         {[
           {key:"status", opts:["New","Assigned","Accepted","In Progress","Review","Completed","Overdue","Archived"]},
           {key:"priority",opts:["High","Medium","Low"]},
-          {key:"dept",   opts:["Finance","Strategy","Investment","Operations","Legal"]},
+          {key:"dept",   opts:departments},
         ].map(({key,opts})=>(
           <select key={key} value={f[key]} onChange={e=>setF({...f,[key]:e.target.value})} style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 10px", color:f[key]?C.text:C.textSub, fontSize:12, outline:"none", cursor:"pointer" }}>
             <option value="">All {key}s</option>
@@ -805,15 +807,27 @@ const AllDirectives = ({ directives, users, currentUser, onPick, onNew }) => {
 };
 
 // ── CREATE DIRECTIVE ──────────────────────────
-const CreateDirective = ({ users, currentUser, onSave, onCancel }) => {
+const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCancel }) => {
+  const [assignRole, setAssignRole] = useState("");
+
   const assignableUsers = users
-    .filter(u => u.user_id !== "System" && u.status === "Active")
+    .filter(u => u.user_id !== "System" && u.status === "Active" && (!assignRole || u.role === assignRole))
     .map(u => ({ value: u.user_id, label: `${u.name} (${u.role})` }));
 
   const ceoUserId = users.find(u => u.role === "CEO" && u.status === "Active")?.user_id || "";
 
-  const [form, setForm] = useState({ title:"", description:"", assigned_to:ceoUserId, dept:"Finance", priority:"Medium", deadline:"" });
+  const defaultDept = departments.includes('Finance')
+    ? 'Finance'
+    : (departments[0] || 'Executive');
+
+  const [form, setForm] = useState({ title:"", description:"", assigned_to:ceoUserId, dept:defaultDept, priority:"Medium", deadline:"" });
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  useEffect(() => {
+    if (!form.dept || !departments.includes(form.dept)) {
+      f('dept', defaultDept);
+    }
+  }, [departments, defaultDept, form.dept]);
 
   useEffect(() => {
     const stillValid = assignableUsers.some(u => u.value === form.assigned_to);
@@ -824,12 +838,18 @@ const CreateDirective = ({ users, currentUser, onSave, onCancel }) => {
 
   const submit = () => {
     if (!form.title.trim()||!form.deadline||!form.assigned_to) return;
-    const DEPT_EXEC = { Finance:"U003", Strategy:"U004", Investment:"U005", Operations:"U006", Legal:"U007" };
+    const deptExec = users.find(u =>
+      u.status === 'Active' &&
+      u.dept === form.dept &&
+      u.user_id !== 'System' &&
+      !['Chairman', 'CEO', 'Director', 'Team'].includes(u.role)
+    )?.user_id;
+
     onSave({
       directive_id:"DIR-2026-"+String(Math.floor(Math.random()*900+100)),
       ...form, title:form.title.trim(), description:form.description.trim(),
       issued_by:currentUser.user_id,
-      delegated_to:form.assigned_to===ceoUserId?(DEPT_EXEC[form.dept]||form.assigned_to):form.assigned_to,
+      delegated_to:form.assigned_to===ceoUserId?(deptExec||form.assigned_to):form.assigned_to,
       status:"New", progress:0,
       created:new Date().toISOString(),
       tasks:[], comments:[], attachments:[],
@@ -844,8 +864,9 @@ const CreateDirective = ({ users, currentUser, onSave, onCancel }) => {
         <Field label="Directive Title" value={form.title} onChange={v=>f("title",v)} placeholder="Clear, action-oriented title…" required />
         <Field label="Description / Brief" value={form.description} onChange={v=>f("description",v)} as="textarea" placeholder="Detailed directive brief, expected outcomes, and context…" rows={4} />
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <Field label="Role (optional)" value={assignRole} onChange={setAssignRole} as="select" options={roles} />
           <Field label="Assign To" value={form.assigned_to} onChange={v=>f("assigned_to",v)} as="select" options={assignableUsers} />
-          <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select" options={["Finance","Strategy","Investment","Operations","Legal"]} />
+          <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select" options={departments} />
           <Field label="Priority" value={form.priority} onChange={v=>f("priority",v)} as="select" options={["High","Medium","Low"]} />
           <Field label="Deadline" value={form.deadline} onChange={v=>f("deadline",v)} type="date" required />
         </div>
@@ -906,7 +927,7 @@ const AuditLog = ({ auditLog, users, directives }) => {
 };
 
 // ── ARCHIVE ───────────────────────────────────
-const Archive = ({ directives, users, onPick }) => {
+const Archive = ({ directives, users, departments, onPick }) => {
   const [q, setQ]   = useState("");
   const [dept, setDept] = useState("");
   const pool    = directives.filter(d=>["Completed","Archived"].includes(d.status));
@@ -923,7 +944,7 @@ const Archive = ({ directives, users, onPick }) => {
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search archive…" style={{ flex:1, minWidth:160, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 12px", color:C.text, fontSize:13, outline:"none" }} />
         <select value={dept} onChange={e=>setDept(e.target.value)} style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 10px", color:dept?C.text:C.textSub, fontSize:12, outline:"none" }}>
           <option value="">All Departments</option>
-          {["Finance","Strategy","Investment","Operations","Legal"].map(d=><option key={d} value={d}>{d}</option>)}
+          {departments.map(d=><option key={d} value={d}>{d}</option>)}
         </select>
       </div>
       {visible.length===0
@@ -935,15 +956,24 @@ const Archive = ({ directives, users, onPick }) => {
 };
 
 // ── USER MANAGEMENT (CHAIRMAN FULL CONTROL) ───
-const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
+const Users = ({ users, directives, roles, roleItems, departments, departmentItems, currentUser, onUpdateUsers, onAddRole, onUpdateRole, onDeleteRole, onAddDepartment, onUpdateDepartment, onDeleteDepartment, logAction, toast }) => {
   const [modal, setModal]       = useState(null); // null | "add" | "edit" | "delete" | "suspend" | "reset"
   const [target, setTarget]     = useState(null);
   const [search, setSearch]     = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [form, setForm]         = useState({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"", password:"" });
+  const [metaTab, setMetaTab] = useState('roles');
+  const defaultRole = roles.includes('Director') ? 'Director' : (roles[0] || 'Team');
+  const defaultDept = departments.includes('Finance') ? 'Finance' : (departments[0] || 'Executive');
+  const [form, setForm]         = useState({ name:"", email:"", role:defaultRole, dept:defaultDept, status:"Active", phone:"", password:"" });
   const [resetPwd, setResetPwd] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [newDepartment, setNewDepartment] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState(null);
+  const [editingRoleName, setEditingRoleName] = useState('');
+  const [editingDeptId, setEditingDeptId] = useState(null);
+  const [editingDeptName, setEditingDeptName] = useState('');
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const isChairman = currentUser.role==="Chairman";
@@ -957,7 +987,7 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
 
   const openAdd = () => {
     setTarget(null);
-    setForm({ name:"", email:"", role:"Director", dept:"Finance", status:"Active", phone:"", password:"" });
+    setForm({ name:"", email:"", role:defaultRole, dept:defaultDept, status:"Active", phone:"", password:"" });
     setModal("add");
   };
 
@@ -1050,9 +1080,91 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
     }
   };
 
+  useEffect(() => {
+    if (!roles.includes(form.role)) {
+      f('role', defaultRole);
+    }
+  }, [roles, form.role, defaultRole]);
+
+  useEffect(() => {
+    if (!departments.includes(form.dept)) {
+      f('dept', defaultDept);
+    }
+  }, [departments, form.dept, defaultDept]);
+
+  const createRole = async () => {
+    const value = newRole.trim();
+    if (!value) return;
+    const ok = await onAddRole(value);
+    if (ok) {
+      setNewRole('');
+      toast(`Role added: ${value}`);
+    }
+  };
+
+  const startEditRole = item => {
+    setEditingRoleId(item.id);
+    setEditingRoleName(item.name);
+  };
+
+  const saveRoleEdit = async item => {
+    const next = editingRoleName.trim();
+    if (!next) return;
+    const ok = await onUpdateRole(item.id, next, item.name);
+    if (ok) {
+      setEditingRoleId(null);
+      setEditingRoleName('');
+      toast(`Role updated: ${item.name} -> ${next}`);
+    }
+  };
+
+  const removeRole = async item => {
+    const confirmed = window.confirm(`Delete role "${item.name}"?`);
+    if (!confirmed) return;
+    const ok = await onDeleteRole(item.id);
+    if (ok) {
+      toast(`Role deleted: ${item.name}`, 'warn');
+    }
+  };
+
+  const startEditDepartment = item => {
+    setEditingDeptId(item.id);
+    setEditingDeptName(item.name);
+  };
+
+  const saveDepartmentEdit = async item => {
+    const next = editingDeptName.trim();
+    if (!next) return;
+    const ok = await onUpdateDepartment(item.id, next, item.name);
+    if (ok) {
+      setEditingDeptId(null);
+      setEditingDeptName('');
+      toast(`Department updated: ${item.name} -> ${next}`);
+    }
+  };
+
+  const removeDepartment = async item => {
+    const confirmed = window.confirm(`Delete department "${item.name}"?`);
+    if (!confirmed) return;
+    const ok = await onDeleteDepartment(item.id);
+    if (ok) {
+      toast(`Department deleted: ${item.name}`, 'warn');
+    }
+  };
+
+  const createDepartment = async () => {
+    const value = newDepartment.trim();
+    if (!value) return;
+    const ok = await onAddDepartment(value);
+    if (ok) {
+      setNewDepartment('');
+      toast(`Department added: ${value}`);
+    }
+  };
+
   const closeModal = () => { setModal(null); setTarget(null); };
 
-  const allRoles = [...new Set(users.map(u=>u.role))];
+  const allRoles = roles;
 
   return (
     <div>
@@ -1065,6 +1177,83 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
         </div>
         {isChairman&&<Btn onClick={openAdd} icon="＋">Add User</Btn>}
       </div>
+
+      {isChairman && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+            <button onClick={()=>setMetaTab('roles')} style={{ background:metaTab==='roles'?C.goldDim:C.surfaceAlt, border:`1px solid ${metaTab==='roles'?C.goldBorder:C.border}`, color:metaTab==='roles'?C.gold:C.textSub, borderRadius:7, padding:'6px 10px', fontSize:12, cursor:'pointer' }}>Roles</button>
+            <button onClick={()=>setMetaTab('departments')} style={{ background:metaTab==='departments'?C.goldDim:C.surfaceAlt, border:`1px solid ${metaTab==='departments'?C.goldBorder:C.border}`, color:metaTab==='departments'?C.gold:C.textSub, borderRadius:7, padding:'6px 10px', fontSize:12, cursor:'pointer' }}>Departments</button>
+          </div>
+
+          {metaTab === 'roles' ? (
+            <div>
+              <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                <input value={newRole} onChange={e=>setNewRole(e.target.value)} placeholder="Add new role" style={{ flex:1, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 12px", color:C.text, fontSize:13, outline:"none" }} />
+                <Btn small onClick={createRole} disabled={!newRole.trim()}>Add Role</Btn>
+              </div>
+              {roleItems.map(item=>{
+                const roleUsage = users.filter(u => u.role === item.name).length;
+                const isCoreRole = item.name === 'Chairman';
+                const isEditing = editingRoleId === item.id;
+                return (
+                  <div key={item.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
+                    {isEditing ? (
+                      <input value={editingRoleName} onChange={e=>setEditingRoleName(e.target.value)} style={{ flex:1, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:'7px 10px', color:C.text, fontSize:12, outline:'none' }} />
+                    ) : (
+                      <div style={{ flex:1, fontSize:13, color:C.text }}>{item.name}</div>
+                    )}
+                    <div style={{ fontSize:11, color:C.textMuted }}>{roleUsage} users</div>
+                    {isEditing ? (
+                      <>
+                        <Btn small onClick={()=>saveRoleEdit(item)} disabled={!editingRoleName.trim()}>Save</Btn>
+                        <Btn small variant="secondary" onClick={()=>{setEditingRoleId(null);setEditingRoleName('');}}>Cancel</Btn>
+                      </>
+                    ) : (
+                      <>
+                        <Btn small variant="ghost" onClick={()=>startEditRole(item)}>Edit</Btn>
+                        <Btn small variant="danger" onClick={()=>removeRole(item)} disabled={isCoreRole}>Delete</Btn>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div>
+              <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                <input value={newDepartment} onChange={e=>setNewDepartment(e.target.value)} placeholder="Add new department" style={{ flex:1, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 12px", color:C.text, fontSize:13, outline:"none" }} />
+                <Btn small onClick={createDepartment} disabled={!newDepartment.trim()}>Add Dept</Btn>
+              </div>
+              {departmentItems.map(item=>{
+                const usersUsage = users.filter(u => u.dept === item.name).length;
+                const directivesUsage = directives.filter(d => d.dept === item.name).length;
+                const isEditing = editingDeptId === item.id;
+                return (
+                  <div key={item.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
+                    {isEditing ? (
+                      <input value={editingDeptName} onChange={e=>setEditingDeptName(e.target.value)} style={{ flex:1, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:'7px 10px', color:C.text, fontSize:12, outline:'none' }} />
+                    ) : (
+                      <div style={{ flex:1, fontSize:13, color:C.text }}>{item.name}</div>
+                    )}
+                    <div style={{ fontSize:11, color:C.textMuted }}>{usersUsage} users · {directivesUsage} directives</div>
+                    {isEditing ? (
+                      <>
+                        <Btn small onClick={()=>saveDepartmentEdit(item)} disabled={!editingDeptName.trim()}>Save</Btn>
+                        <Btn small variant="secondary" onClick={()=>{setEditingDeptId(null);setEditingDeptName('');}}>Cancel</Btn>
+                      </>
+                    ) : (
+                      <>
+                        <Btn small variant="ghost" onClick={()=>startEditDepartment(item)}>Edit</Btn>
+                        <Btn small variant="danger" onClick={()=>removeDepartment(item)}>Delete</Btn>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Filters */}
       <div style={{ display:"flex", gap:7, marginBottom:14, flexWrap:"wrap" }}>
@@ -1134,9 +1323,9 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} placeholder="+92-300-0000000" />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
-              options={["CEO","CFO","CSO","CISO","COO","CLO","Director","Team"]} />
+              options={roles.filter(r => r !== 'Chairman')} />
             <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select"
-              options={["Executive","Finance","Strategy","Investment","Operations","Legal"]} />
+              options={departments} />
           </div>
           <Field label="Status" value={form.status} onChange={v=>f("status",v)} as="select" options={["Active","Inactive"]} />
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
@@ -1167,9 +1356,9 @@ const Users = ({ users, currentUser, onUpdateUsers, logAction, toast }) => {
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
-              options={["CEO","CFO","CSO","CISO","COO","CLO","Director","Team"]} disabled={target.user_id===currentUser.user_id} />
+              options={roles.filter(r => r !== 'Chairman')} disabled={target.user_id===currentUser.user_id} />
             <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select"
-              options={["Executive","Finance","Strategy","Investment","Operations","Legal"]} disabled={target.user_id===currentUser.user_id} />
+              options={departments} disabled={target.user_id===currentUser.user_id} />
           </div>
           <Field label="Status" value={form.status} onChange={v=>f("status",v)} as="select" options={["Active","Inactive","Suspended"]} disabled={target.user_id===currentUser.user_id} />
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
@@ -1299,6 +1488,10 @@ export default function ECCApp() {
   const [user,        setUser]        = useState(null);
   const [directives,  setDirectives]  = useState([]);
   const [users,       setUsers]       = useState([]);
+  const [roles,       setRoles]       = useState([]);
+  const [roleItems,   setRoleItems]   = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [departmentItems, setDepartmentItems] = useState([]);
   const [notifs,      setNotifs]      = useState([]);
   const [auditLog,    setAuditLog]    = useState([]);
   const [view,        setView]        = useState("dashboard");
@@ -1330,6 +1523,10 @@ export default function ECCApp() {
         setDirectives(data.directives);
         setNotifs(data.notifications);
         setAuditLog(data.auditLog);
+        setRoles(data.roles || []);
+        setRoleItems(data.roleItems || []);
+        setDepartments(data.departments || []);
+        setDepartmentItems(data.departmentItems || []);
       }
     } catch (e) {
       console.error('Failed to load data:', e);
@@ -1364,6 +1561,151 @@ export default function ECCApp() {
     setView("directives");
     fetch('/api/directives', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(directive) }).catch(console.error);
   };
+
+  const addRole = useCallback(async name => {
+    try {
+      const res = await fetch('/api/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not add role', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setRoles(data.roles || []);
+      setRoleItems(data.roleItems || []);
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not add role', 'error');
+      return false;
+    }
+  }, [showToast]);
+
+  const updateRole = useCallback(async (id, name, oldName) => {
+    try {
+      const res = await fetch(`/api/roles/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not update role', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setRoles(data.roles || []);
+      setRoleItems(data.roleItems || []);
+      setUsers(prev => prev.map(u => (u.role === oldName ? { ...u, role: name } : u)));
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not update role', 'error');
+      return false;
+    }
+  }, [showToast]);
+
+  const deleteRole = useCallback(async id => {
+    try {
+      const res = await fetch(`/api/roles/${id}`, { method: 'DELETE' });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not delete role', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setRoles(data.roles || []);
+      setRoleItems(data.roleItems || []);
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not delete role', 'error');
+      return false;
+    }
+  }, [showToast]);
+
+  const addDepartment = useCallback(async name => {
+    try {
+      const res = await fetch('/api/departments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not add department', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setDepartments(data.departments || []);
+      setDepartmentItems(data.departmentItems || []);
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not add department', 'error');
+      return false;
+    }
+  }, [showToast]);
+
+  const updateDepartment = useCallback(async (id, name, oldName) => {
+    try {
+      const res = await fetch(`/api/departments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not update department', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setDepartments(data.departments || []);
+      setDepartmentItems(data.departmentItems || []);
+      setUsers(prev => prev.map(u => (u.dept === oldName ? { ...u, dept: name } : u)));
+      setDirectives(prev => prev.map(d => (d.dept === oldName ? { ...d, dept: name } : d)));
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not update department', 'error');
+      return false;
+    }
+  }, [showToast]);
+
+  const deleteDepartment = useCallback(async id => {
+    try {
+      const res = await fetch(`/api/departments/${id}`, { method: 'DELETE' });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not delete department', 'error');
+        return false;
+      }
+
+      const data = await res.json();
+      setDepartments(data.departments || []);
+      setDepartmentItems(data.departmentItems || []);
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not delete department', 'error');
+      return false;
+    }
+  }, [showToast]);
 
   const pickDirective = d => { setSelDir(d); setView("detail"); };
 
@@ -1456,17 +1798,17 @@ export default function ECCApp() {
     if (view==="detail"&&selDir)
       return <Detail d={selDir} users={users} currentUser={user} allDirectives={directives} onUpdate={updateDirective} onBack={()=>setView("directives")} logAction={logAction} pushNotif={pushNotif} />;
     if (view==="create")
-      return <CreateDirective users={users} currentUser={user} onSave={createDirective} onCancel={()=>setView("directives")} />;
+      return <CreateDirective users={users} roles={roles} departments={departments} currentUser={user} onSave={createDirective} onCancel={()=>setView("directives")} />;
     if (view==="directives")
-      return <AllDirectives directives={directives} users={users} currentUser={user} onPick={pickDirective} onNew={()=>setView("create")} />;
+      return <AllDirectives directives={directives} users={users} currentUser={user} departments={departments} onPick={pickDirective} onNew={()=>setView("create")} />;
     if (view==="archive")
-      return <Archive directives={directives} users={users} onPick={pickDirective} />;
+      return <Archive directives={directives} users={users} departments={departments} onPick={pickDirective} />;
     if (view==="audit")
       return <AuditLog auditLog={auditLog} users={users} directives={directives} />;
     if (view==="users")
-      return <Users users={users} currentUser={user} onUpdateUsers={setUsers} logAction={logAction} toast={showToast} />;
+      return <Users users={users} directives={directives} roles={roles} roleItems={roleItems} departments={departments} departmentItems={departmentItems} currentUser={user} onUpdateUsers={setUsers} onAddRole={addRole} onUpdateRole={updateRole} onDeleteRole={deleteRole} onAddDepartment={addDepartment} onUpdateDepartment={updateDepartment} onDeleteDepartment={deleteDepartment} logAction={logAction} toast={showToast} />;
     // dashboards
-    if (user.role==="Chairman") return <ChairmanDash directives={directives} users={users} onPick={pickDirective} />;
+    if (user.role==="Chairman") return <ChairmanDash directives={directives} users={users} departments={departments} onPick={pickDirective} />;
     if (user.role==="CEO")      return <CEODash directives={directives} users={users} onPick={pickDirective} />;
     return <ExecDash currentUser={user} directives={directives} users={users} onPick={pickDirective} />;
   };

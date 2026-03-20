@@ -1,12 +1,13 @@
 import sql from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { getDepartments, getRoles } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    const [users, directives, tasks, comments, attachments, notifications, auditLogs] = await Promise.all([
+    const [users, directives, tasks, comments, attachments, notifications, auditLogs, roleItems, departmentItems] = await Promise.all([
       sql`SELECT * FROM users ORDER BY user_id`,
       sql`SELECT * FROM directives ORDER BY created_at DESC`,
       sql`SELECT * FROM tasks ORDER BY created_at`,
@@ -14,7 +15,12 @@ export async function GET() {
       sql`SELECT * FROM attachments ORDER BY created_at`,
       sql`SELECT * FROM notifications ORDER BY created_at`,
       sql`SELECT * FROM audit_logs ORDER BY created_at`,
+      getRoles(),
+      getDepartments(),
     ]);
+
+    const roles = roleItems.map(item => item.name);
+    const departments = departmentItems.map(item => item.name);
 
     // Assemble directives with nested tasks, comments, attachments
     const assembledDirectives = directives.map(d => ({
@@ -80,6 +86,10 @@ export async function GET() {
       directives: assembledDirectives,
       notifications: mappedNotifications,
       auditLog: mappedAudit,
+      roles,
+      departments,
+      roleItems,
+      departmentItems,
     });
   } catch (error) {
     console.error('Data fetch error:', error);
