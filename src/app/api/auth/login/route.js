@@ -42,6 +42,13 @@ export async function POST(request) {
     return NextResponse.json({ ...safeUser, token });
   } catch (error) {
     console.error('Login error:', error);
+    const isAuthConfigError =
+      error instanceof Error && error.message.toLowerCase().includes('auth_token_secret');
+
+    if (isAuthConfigError) {
+      return NextResponse.json({ error: 'Authentication is not configured on the server' }, { status: 500 });
+    }
+
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
