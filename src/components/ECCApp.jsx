@@ -76,6 +76,7 @@ const uid = () => Math.random().toString(36).substr(2, 8).toUpperCase();
 const fmt  = ts => new Date(ts).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
 const fmtS = ts => new Date(ts).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
 const fmtT = ts => new Date(ts).toLocaleString("en-GB",    { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+const AUTH_STORAGE_KEY = "ecc-auth-session";
 const daysLeft = d => Math.ceil((new Date(d) - new Date()) / 86400000);
 const byId = (list, id) => list.find(x => x.user_id === id);
 const lastName = (users, id) => byId(users, id)?.name?.split(" ").slice(-1)[0] || id;
@@ -507,11 +508,12 @@ const ExecDash = ({ currentUser, directives, users, onPick }) => {
 };
 
 // ── DIRECTIVE DETAIL ──────────────────────────
-const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onBack, logAction, pushNotif }) => {
+const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onDelete, onBack, logAction, pushNotif }) => {
   const [d, setD]             = useState(initD);
   const [tab, setTab]         = useState("overview");
   const [comment, setComment] = useState("");
   const [progress, setProgress] = useState(initD.progress);
+  const [deleting, setDeleting] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [showTask,   setShowTask]   = useState(false);
   const [newStatus,  setNewStatus]  = useState("");
@@ -519,6 +521,9 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onBack,
 
   const rc     = ROLE_CONFIG[currentUser.role];
   const canEdit = rc?.canViewAll || d.delegated_to===currentUser.user_id || d.assigned_to===currentUser.user_id;
+  const issuerRole = (byId(users, d.issued_by)?.role || '').toLowerCase();
+  const currentRole = (currentUser.role || '').toLowerCase();
+  const canDelete = currentRole === 'chairman' || (currentRole === 'ceo' && issuerRole !== 'chairman');
   const nexts  = STATUS_FLOW[d.status] || [];
   const days   = daysLeft(d.deadline);
 
@@ -577,6 +582,17 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onBack,
 
   const deptUsers = users.filter(u=>u.dept===d.dept||["Chairman","CEO"].includes(u.role));
 
+  const deleteDirective = async () => {
+    if (!canDelete || deleting) return;
+
+    const confirmed = window.confirm(`Delete directive "${d.directive_id}"? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    await onDelete(d);
+    setDeleting(false);
+  };
+
   return (
     <div>
       <button onClick={onBack} style={{ background:"none", border:"none", color:C.textSub, cursor:"pointer", fontSize:13, marginBottom:14, display:"flex", alignItems:"center", gap:6, padding:0 }}>← Back</button>
@@ -595,7 +611,10 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onBack,
             </span>
           </div>
         </div>
-        {canEdit && nexts.length>0 && <Btn onClick={()=>setShowStatus(true)} icon="↗">Update Status</Btn>}
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {canEdit && nexts.length>0 && <Btn onClick={()=>setShowStatus(true)} icon="↗">Update Status</Btn>}
+          {canDelete && <Btn variant="danger" onClick={deleteDirective} disabled={deleting} icon="🗑️">{deleting ? 'Deleting…' : 'Delete Directive'}</Btn>}
+        </div>
       </div>
 
       {/* Progress */}
@@ -883,6 +902,7 @@ const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCan
 const AuditLog = ({ auditLog, users, directives }) => {
   const ACTION = {
     directive_created:  { label:"Created",          icon:"📋", color:C.blue },
+    directive_deleted:  { label:"Deleted",          icon:"🗑️", color:C.red },
     task_assigned:      { label:"Task Assigned",     icon:"📤", color:C.gold },
     status_updated:     { label:"Status Updated",    icon:"↗",  color:C.yellow },
     directive_completed:{ label:"Completed",         icon:"✅", color:C.green },
@@ -1486,6 +1506,7 @@ const NotifsPanel = ({ notifs, currentUser, onRead, onReadAll, onClose }) => {
 // ═══════════════════════════════════════════════
 export default function ECCApp() {
   const [user,        setUser]        = useState(null);
+  const [authToken,   setAuthToken]   = useState("");
   const [directives,  setDirectives]  = useState([]);
   const [users,       setUsers]       = useState([]);
   const [roles,       setRoles]       = useState([]);
@@ -1561,6 +1582,40 @@ export default function ECCApp() {
     setView("directives");
     fetch('/api/directives', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(directive) }).catch(console.error);
   };
+
+  const deleteDirective = useCallback(async directive => {
+    if (!authToken) {
+      showToast('Session expired. Please sign in again.', 'error');
+      return false;
+    }
+
+    try {
+      const res = await fetch(`/api/directives/${directive.directive_id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Could not delete directive', 'error');
+        return false;
+      }
+
+      setDirectives(prev => prev.filter(d => d.directive_id !== directive.directive_id));
+      setSelDir(prev => (prev?.directive_id === directive.directive_id ? null : prev));
+      setView('directives');
+      logAction(user.user_id, directive.directive_id, 'directive_deleted', directive.title, 'deleted');
+      showToast('Directive deleted', 'warn');
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast('Could not delete directive', 'error');
+      return false;
+    }
+  }, [authToken, logAction, showToast, user]);
 
   const addRole = useCallback(async name => {
     try {
@@ -1709,12 +1764,57 @@ export default function ECCApp() {
 
   const pickDirective = d => { setSelDir(d); setView("detail"); };
 
+  const signOut = useCallback(() => {
+    setUser(null);
+    setAuthToken('');
+    setView('dashboard');
+    setSelDir(null);
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (error) {
+      console.error('Could not clear session:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed?.user || !parsed?.token) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        return;
+      }
+
+      setUser(parsed.user);
+      setAuthToken(parsed.token);
+      loadData();
+    } catch (error) {
+      console.error('Could not restore session:', error);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }, [loadData]);
+
   const handleLogin = async (u) => {
     if (u.status==="Suspended") { alert("Your account has been suspended. Contact the Chairman."); return; }
-    setUser(u);
+    const { token, ...safeUser } = u;
+
+    if (!token) {
+      showToast('Login failed: missing auth token', 'error');
+      return;
+    }
+
+    setUser(safeUser);
+    setAuthToken(token);
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: safeUser, token }));
+    } catch (error) {
+      console.error('Could not save session:', error);
+    }
     setView("dashboard");
     await loadData();
-    showToast(`Welcome, ${u.name.split(" ")[0]}`);
+    showToast(`Welcome, ${safeUser.name.split(" ")[0]}`);
   };
 
   const openChangePassword = () => {
@@ -1796,7 +1896,7 @@ export default function ECCApp() {
 
   const renderView = () => {
     if (view==="detail"&&selDir)
-      return <Detail d={selDir} users={users} currentUser={user} allDirectives={directives} onUpdate={updateDirective} onBack={()=>setView("directives")} logAction={logAction} pushNotif={pushNotif} />;
+      return <Detail d={selDir} users={users} currentUser={user} allDirectives={directives} onUpdate={updateDirective} onDelete={deleteDirective} onBack={()=>setView("directives")} logAction={logAction} pushNotif={pushNotif} />;
     if (view==="create")
       return <CreateDirective users={users} roles={roles} departments={departments} currentUser={user} onSave={createDirective} onCancel={()=>setView("directives")} />;
     if (view==="directives")
@@ -1864,12 +1964,12 @@ export default function ECCApp() {
                 </div>
               </div>
               <button onClick={openChangePassword} style={{ width:"100%", background:"none", border:`1px solid ${C.border}`, color:C.textSub, padding:"6px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600, marginBottom:6 }}>Change Password</button>
-              <button onClick={()=>setUser(null)} style={{ width:"100%", background:"none", border:`1px solid ${C.border}`, color:C.textSub, padding:"6px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600 }}>Sign Out</button>
+              <button onClick={signOut} style={{ width:"100%", background:"none", border:`1px solid ${C.border}`, color:C.textSub, padding:"6px 10px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:600 }}>Sign Out</button>
             </div>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
               <button onClick={openChangePassword} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>🔑</button>
-              <button onClick={()=>setUser(null)} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>⏻</button>
+              <button onClick={signOut} style={{ width:"100%", background:"none", border:"none", color:C.textSub, cursor:"pointer", padding:8, fontSize:15, borderRadius:7 }}>⏻</button>
             </div>
           )}
         </div>

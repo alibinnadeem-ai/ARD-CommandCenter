@@ -1,5 +1,6 @@
 import sql from '@/lib/db';
 import { hashPassword, isBcryptHash, verifyPassword } from '@/lib/auth';
+import { createAuthToken } from '@/lib/session';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,8 @@ export async function POST(request) {
     }
 
     const { password: _password, ...safeUser } = user;
-    return NextResponse.json(safeUser);
+    const token = createAuthToken({ userId: safeUser.user_id, role: safeUser.role });
+    return NextResponse.json({ ...safeUser, token });
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
