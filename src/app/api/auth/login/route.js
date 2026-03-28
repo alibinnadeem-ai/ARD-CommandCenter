@@ -8,14 +8,17 @@ export const dynamic = 'force-dynamic';
 export async function POST(request) {
   try {
     const { email, password } = await request.json();
-    if (!email || !password) {
+    const emailNorm = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const passwordNorm = typeof password === 'string' ? password : '';
+
+    if (!emailNorm || !passwordNorm) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
     const rows = await sql`
-      SELECT user_id, name, email, role, dept, status, joined, phone, password
+      SELECT user_id, name, email, role, dept, status, password
       FROM users
-      WHERE email = ${email}
+      WHERE LOWER(TRIM(email)) = ${emailNorm}
       LIMIT 1
     `;
     if (rows.length === 0) {
@@ -23,14 +26,15 @@ export async function POST(request) {
     }
 
     const user = rows[0];
-    const ok = await verifyPassword(password, user.password);
+    const ok = await verifyPassword(passwordNorm, user.password);
     if (!ok) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
     if (!isBcryptHash(user.password)) {
-      const upgradedHash = await hashPassword(password);
-      await sql`UPDATE users SET password = ${upgradedHash}, updated_at = NOW() WHERE user_id = ${user.user_id}`;
+      const upgradedHash = await hashPassword(passwordNorm);
+      // Keep upgrade write compatible with older schemas that don't have updated_at.
+      await sql`UPDATE users SET password = ${upgradedHash} WHERE user_id = ${user.user_id}`;
     }
 
     const { password: _password, ...safeUser } = user;

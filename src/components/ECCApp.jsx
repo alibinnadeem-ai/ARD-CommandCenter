@@ -314,7 +314,12 @@ const Login = ({ onLogin }) => {
         setError("");
         onLogin(u);
       } else {
-        setError("Invalid credentials. Use a demo account below.");
+        const payload = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setError("Invalid credentials. Use a demo account below.");
+        } else {
+          setError(payload?.error || "Sign in failed. Please try again.");
+        }
       }
     } catch (e) {
       setError("Connection error. Please try again.");
