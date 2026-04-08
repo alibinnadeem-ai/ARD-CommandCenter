@@ -64,6 +64,20 @@ const STATUS_FLOW = {
   "Overdue": ["In Progress", "Review"],
 };
 
+const STATUS_SORT_ORDER = ["Overdue", "New", "Assigned", "Accepted", "In Progress", "Review", "Completed", "Archived"];
+const PRIORITY_SORT_ORDER = ["High", "Medium", "Low"];
+const DEFAULT_DIRECTIVE_SORT = "created_desc";
+const DIRECTIVE_SORT_OPTIONS = [
+  { value: DEFAULT_DIRECTIVE_SORT, label: "Newest First" },
+  { value: "created_asc", label: "Oldest First" },
+  { value: "deadline_asc", label: "Deadline Soonest" },
+  { value: "deadline_desc", label: "Deadline Latest" },
+  { value: "priority", label: "Priority" },
+  { value: "status", label: "Status" },
+  { value: "dept", label: "Department" },
+  { value: "role", label: "Role" },
+];
+
 // ─────────────────────────────────────────────
 // SEED DATA
 // ─────────────────────────────────────────────
@@ -80,6 +94,10 @@ const AUTH_STORAGE_KEY = "ecc-auth-session";
 const daysLeft = d => Math.ceil((new Date(d) - new Date()) / 86400000);
 const byId = (list, id) => list.find(x => x.user_id === id);
 const lastName = (users, id) => byId(users, id)?.name?.split(" ").slice(-1)[0] || id;
+const directiveOwner = (users, directive) => byId(users, directive.delegated_to) || byId(users, directive.assigned_to) || null;
+const directiveRole = (users, directive) => directiveOwner(users, directive)?.role || "";
+const compareText = (a = "", b = "") => a.localeCompare(b, undefined, { sensitivity: "base" });
+const compareDates = (a, b) => new Date(a || 0).getTime() - new Date(b || 0).getTime();
 
 // ─────────────────────────────────────────────
 // ATOMS
@@ -261,14 +279,16 @@ const DRow = ({ d, users, onClick, compact }) => {
   const days = daysLeft(d.deadline);
   const late = d.status==="Overdue"||days<0;
   const sm = STATUS_META[d.status]||STATUS_META["New"];
+  const owner = directiveOwner(users, d);
+  const ownerLabel = owner?.name || lastName(users, d.delegated_to || d.assigned_to) || "Unassigned";
   return (
     <Card onClick={onClick} style={{ padding:compact?"11px 14px":"15px 16px", marginBottom:7, borderLeft:`3px solid ${sm.color}` }}>
       <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:6, alignItems:"center", marginBottom:3, flexWrap:"wrap" }}>
             <span style={{ fontSize:10, color:C.textMuted, fontFamily:"monospace" }}>{d.directive_id}</span>
-            <span style={{ fontSize:10, color:C.textMuted }}>·</span>
-            <span style={{ fontSize:10, color:C.textSub }}>{d.dept}</span>
+            {d.dept && <Tag color={C.cyan}>{d.dept}</Tag>}
+            {owner?.role && <RoleBadge role={owner.role} />}
           </div>
           <div style={{ fontSize:13, fontWeight:700, color:C.text, lineHeight:1.35, marginBottom:compact?5:9 }}>{d.title}</div>
           {!compact&&<div style={{ fontSize:12, color:C.textSub, lineHeight:1.5, marginBottom:8, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{d.description}</div>}
@@ -278,7 +298,7 @@ const DRow = ({ d, users, onClick, compact }) => {
             <span style={{ fontSize:10, color:late?C.red:days<=7?C.yellow:C.textMuted }}>
               {late?`${Math.abs(days)}d overdue`:`${days}d left`}
             </span>
-            <span style={{ fontSize:10, color:C.textMuted }}>→ {lastName(users, d.delegated_to)}</span>
+            <span style={{ fontSize:10, color:C.textMuted }}>→ {ownerLabel}</span>
           </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end", flexShrink:0 }}>
@@ -788,43 +808,115 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onDelet
 };
 
 // ── ALL DIRECTIVES ────────────────────────────
-const AllDirectives = ({ directives, users, currentUser, departments, onPick, onNew }) => {
-  const [f, setF] = useState({ status:"", priority:"", dept:"", q:"" });
+const AllDirectives = ({ directives, users, roles, currentUser, departments, onPick, onNew }) => {
+  const [f, setF] = useState({ status:"", priority:"", dept:"", role:"", q:"", sort:DEFAULT_DIRECTIVE_SORT });
   const rc = ROLE_CONFIG[currentUser.role];
-  const visible = directives.filter(d=>{
+  const roleRank = new Map((roles.length ? roles : Object.keys(ROLE_CONFIG)).map((role, index) => [role, index]));
+  const deptRank = new Map(departments.map((dept, index) => [dept, index]));
+  const priorityRank = new Map(PRIORITY_SORT_ORDER.map((value, index) => [value, index]));
+  const statusRank = new Map(STATUS_SORT_ORDER.map((value, index) => [value, index]));
+
+  const visibleByAccess = directives.filter(d=>{
     if (!rc?.canViewAll&&!rc?.depts?.includes("all")&&!rc?.depts?.includes(d.dept)&&d.delegated_to!==currentUser.user_id) return false;
+    return true;
+  });
+
+  const roleOptions = [...new Set(visibleByAccess.map(d => directiveRole(users, d)).filter(Boolean))].sort((a, b) => {
+    const aRank = roleRank.has(a) ? roleRank.get(a) : Number.MAX_SAFE_INTEGER;
+    const bRank = roleRank.has(b) ? roleRank.get(b) : Number.MAX_SAFE_INTEGER;
+    if (aRank !== bRank) return aRank - bRank;
+    return compareText(a, b);
+  });
+
+  const deptOptions = (departments.length ? departments : [...new Set(visibleByAccess.map(d => d.dept).filter(Boolean))])
+    .filter(dept => visibleByAccess.some(d => d.dept === dept));
+
+  const visible = visibleByAccess.filter(d=>{
+    const owner = directiveOwner(users, d);
     if (f.status && d.status!==f.status) return false;
     if (f.priority && d.priority!==f.priority) return false;
     if (f.dept && d.dept!==f.dept) return false;
-    if (f.q && !d.title.toLowerCase().includes(f.q.toLowerCase())) return false;
+    if (f.role && owner?.role!==f.role) return false;
+    if (f.q) {
+      const haystack = [d.directive_id, d.title, d.dept, owner?.name, owner?.role].filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(f.q.trim().toLowerCase())) return false;
+    }
     return true;
   });
+
+  const sorted = [...visible].sort((a, b) => {
+    const ownerA = directiveOwner(users, a);
+    const ownerB = directiveOwner(users, b);
+
+    switch (f.sort) {
+      case "created_asc":
+        return compareDates(a.created, b.created);
+      case "deadline_asc":
+        return compareDates(a.deadline, b.deadline) || compareDates(b.created, a.created);
+      case "deadline_desc":
+        return compareDates(b.deadline, a.deadline) || compareDates(b.created, a.created);
+      case "priority": {
+        const aRank = priorityRank.has(a.priority) ? priorityRank.get(a.priority) : Number.MAX_SAFE_INTEGER;
+        const bRank = priorityRank.has(b.priority) ? priorityRank.get(b.priority) : Number.MAX_SAFE_INTEGER;
+        return aRank - bRank || compareDates(b.created, a.created);
+      }
+      case "status": {
+        const aRank = statusRank.has(a.status) ? statusRank.get(a.status) : Number.MAX_SAFE_INTEGER;
+        const bRank = statusRank.has(b.status) ? statusRank.get(b.status) : Number.MAX_SAFE_INTEGER;
+        return aRank - bRank || compareDates(b.created, a.created);
+      }
+      case "dept": {
+        const aRank = deptRank.has(a.dept) ? deptRank.get(a.dept) : Number.MAX_SAFE_INTEGER;
+        const bRank = deptRank.has(b.dept) ? deptRank.get(b.dept) : Number.MAX_SAFE_INTEGER;
+        return aRank - bRank || compareText(a.dept, b.dept) || compareDates(b.created, a.created);
+      }
+      case "role": {
+        const aRole = ownerA?.role || "";
+        const bRole = ownerB?.role || "";
+        const aRank = roleRank.has(aRole) ? roleRank.get(aRole) : Number.MAX_SAFE_INTEGER;
+        const bRank = roleRank.has(bRole) ? roleRank.get(bRole) : Number.MAX_SAFE_INTEGER;
+        return aRank - bRank || compareText(aRole, bRole) || compareDates(b.created, a.created);
+      }
+      case DEFAULT_DIRECTIVE_SORT:
+      default:
+        return compareDates(b.created, a.created);
+    }
+  });
+
+  const hasActiveFilters = Boolean(f.status || f.priority || f.dept || f.role || f.q || f.sort !== DEFAULT_DIRECTIVE_SORT);
+  const resetFilters = () => setF({ status:"", priority:"", dept:"", role:"", q:"", sort:DEFAULT_DIRECTIVE_SORT });
+  const activeSortLabel = DIRECTIVE_SORT_OPTIONS.find(option => option.value === f.sort)?.label || "Newest First";
 
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
         <div>
           <h2 style={{ margin:0, fontSize:20, fontWeight:900, color:C.text, fontFamily:"'Georgia',serif" }}>Directives</h2>
-          <p style={{ margin:"3px 0 0", color:C.textSub, fontSize:13 }}>{visible.length} matching</p>
+          <p style={{ margin:"3px 0 0", color:C.textSub, fontSize:13 }}>{sorted.length} matching · sorted by {activeSortLabel.toLowerCase()}</p>
         </div>
         {rc?.canCreate&&<Btn onClick={onNew} icon="＋">New Directive</Btn>}
       </div>
       <div style={{ display:"flex", gap:7, marginBottom:14, flexWrap:"wrap" }}>
         <input value={f.q} onChange={e=>setF({...f,q:e.target.value})} placeholder="🔍 Search…" style={{ flex:1, minWidth:160, background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 12px", color:C.text, fontSize:13, outline:"none" }} />
         {[
-          {key:"status", opts:["New","Assigned","Accepted","In Progress","Review","Completed","Overdue","Archived"]},
-          {key:"priority",opts:["High","Medium","Low"]},
-          {key:"dept",   opts:departments},
-        ].map(({key,opts})=>(
+          {key:"status", label:"All statuses", opts:["New","Assigned","Accepted","In Progress","Review","Completed","Overdue","Archived"]},
+          {key:"priority", label:"All priorities", opts:["High","Medium","Low"]},
+          {key:"dept", label:"All departments", opts:deptOptions},
+          {key:"role", label:"All roles", opts:roleOptions},
+        ].map(({key,label,opts})=>(
           <select key={key} value={f[key]} onChange={e=>setF({...f,[key]:e.target.value})} style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 10px", color:f[key]?C.text:C.textSub, fontSize:12, outline:"none", cursor:"pointer" }}>
-            <option value="">All {key}s</option>
+            <option value="">{label}</option>
             {opts.map(o=><option key={o} value={o}>{o}</option>)}
           </select>
         ))}
+        <select value={f.sort} onChange={e=>setF({...f,sort:e.target.value})} style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:7, padding:"8px 10px", color:C.text, fontSize:12, outline:"none", cursor:"pointer" }}>
+          {DIRECTIVE_SORT_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        {hasActiveFilters && <Btn variant="ghost" onClick={resetFilters}>Clear</Btn>}
       </div>
-      {visible.length===0
+      {sorted.length===0
         ? <Card style={{ textAlign:"center", padding:40 }}><div style={{ fontSize:28, marginBottom:8 }}>🔍</div><div style={{ color:C.textSub }}>No directives match filters</div></Card>
-        : visible.map(d=><DRow key={d.directive_id} d={d} users={users} onClick={()=>onPick(d)} />)
+        : sorted.map(d=><DRow key={d.directive_id} d={d} users={users} onClick={()=>onPick(d)} />)
       }
     </div>
   );
@@ -1905,7 +1997,7 @@ export default function ECCApp() {
     if (view==="create")
       return <CreateDirective users={users} roles={roles} departments={departments} currentUser={user} onSave={createDirective} onCancel={()=>setView("directives")} />;
     if (view==="directives")
-      return <AllDirectives directives={directives} users={users} currentUser={user} departments={departments} onPick={pickDirective} onNew={()=>setView("create")} />;
+      return <AllDirectives directives={directives} users={users} roles={roles} currentUser={user} departments={departments} onPick={pickDirective} onNew={()=>setView("create")} />;
     if (view==="archive")
       return <Archive directives={directives} users={users} departments={departments} onPick={pickDirective} />;
     if (view==="audit")
