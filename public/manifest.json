@@ -1,7 +1,7 @@
 {
   "name": "Executive Command Center",
   "short_name": "ECC",
-  "description": "Chairman → CEO → C-Suite Directive Governance Platform",
+  "description": "Super Admin / CEO → C-Suite Directive Governance Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#06090d",

@@ -1,7 +1,15 @@
 import sql from '@/lib/db';
+import {
+  CEO_ROLE,
+  DEFAULT_ROLE_ORDER,
+  LEGACY_CHAIRMAN_ROLE,
+  SUPER_ADMIN_ROLE,
+  isProtectedRole,
+} from '@/lib/roles';
 
-const DEFAULT_ROLES = ['Chairman', 'CEO', 'CFO', 'CSO', 'CISO', 'COO', 'CLO', 'Director', 'Team'];
+const DEFAULT_ROLES = DEFAULT_ROLE_ORDER;
 const DEFAULT_DEPARTMENTS = ['Executive', 'Finance', 'Strategy', 'Investment', 'Operations', 'Legal'];
+const LEGACY_CHAIRMAN_TEMP_ROLE = '__legacy_chairman_role__';
 
 const normalizeName = value =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
@@ -46,6 +54,41 @@ function sortByDefaults(items, defaults) {
   });
 }
 
+async function migrateLegacyTopRoles() {
+  const [legacyChairmanUsers, legacyChairmanRoleRows] = await Promise.all([
+    sql`SELECT 1 FROM users WHERE role = ${LEGACY_CHAIRMAN_ROLE} LIMIT 1`,
+    sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`,
+  ]);
+
+  if (legacyChairmanUsers.length > 0) {
+    await sql`UPDATE users SET role = ${LEGACY_CHAIRMAN_TEMP_ROLE}, updated_at = NOW() WHERE role = ${LEGACY_CHAIRMAN_ROLE}`;
+    await sql`UPDATE users SET role = ${SUPER_ADMIN_ROLE}, updated_at = NOW() WHERE role = ${CEO_ROLE}`;
+    await sql`UPDATE users SET role = ${CEO_ROLE}, updated_at = NOW() WHERE role = ${LEGACY_CHAIRMAN_TEMP_ROLE}`;
+  }
+
+  if (legacyChairmanRoleRows.length > 0) {
+    await sql`UPDATE roles SET name = ${LEGACY_CHAIRMAN_TEMP_ROLE} WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`;
+
+    const superAdminRows = await sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${SUPER_ADMIN_ROLE})`;
+    if (superAdminRows.length > 0) {
+      await sql`DELETE FROM roles WHERE LOWER(name) = LOWER(${CEO_ROLE})`;
+    } else {
+      await sql`UPDATE roles SET name = ${SUPER_ADMIN_ROLE} WHERE LOWER(name) = LOWER(${CEO_ROLE})`;
+    }
+
+    const existingCeoRows = await sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${CEO_ROLE})`;
+    if (existingCeoRows.length > 0) {
+      await sql`DELETE FROM roles WHERE name = ${LEGACY_CHAIRMAN_TEMP_ROLE}`;
+    } else {
+      await sql`UPDATE roles SET name = ${CEO_ROLE} WHERE name = ${LEGACY_CHAIRMAN_TEMP_ROLE}`;
+    }
+  }
+
+  await sql`DELETE FROM roles WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`;
+  await addRoleInternal(SUPER_ADMIN_ROLE);
+  await addRoleInternal(CEO_ROLE);
+}
+
 export async function ensureMetadataTables() {
   await sql`
     CREATE TABLE IF NOT EXISTS roles (
@@ -65,6 +108,8 @@ export async function ensureMetadataTables() {
 
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS roles_name_ci_uniq ON roles (LOWER(name))`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS departments_name_ci_uniq ON departments (LOWER(name))`;
+
+  await migrateLegacyTopRoles();
 
   for (const role of DEFAULT_ROLES) {
     await addRoleInternal(role);
@@ -147,6 +192,12 @@ export async function updateRole(id, name) {
     throw err;
   }
 
+  if (isProtectedRole(role.name)) {
+    const err = new Error('System roles cannot be renamed');
+    err.code = 'PROTECTED';
+    throw err;
+  }
+
   const duplicate = await sql`SELECT 1 FROM roles WHERE LOWER(name) = LOWER(${clean}) AND id <> ${id} LIMIT 1`;
   if (duplicate.length > 0) {
     const err = new Error('Role already exists');
@@ -166,6 +217,12 @@ export async function deleteRole(id) {
   if (!role) {
     const err = new Error('Role not found');
     err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  if (isProtectedRole(role.name)) {
+    const err = new Error('System roles cannot be deleted');
+    err.code = 'PROTECTED';
     throw err;
   }
 

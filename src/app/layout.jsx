@@ -2,7 +2,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Executive Command Center',
-  description: 'Chairman → CEO → C-Suite Directive Governance Platform',
+  description: 'Super Admin / CEO → C-Suite Directive Governance Platform',
   manifest: '/manifest.json',
   themeColor: '#c9a227',
   viewport: 'width=device-width, initial-scale=1, maximum-scale=1',

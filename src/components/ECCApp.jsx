@@ -1,9 +1,16 @@
 'use client';
 import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  CEO_ROLE,
+  DEPARTMENT_EXECUTIVE_EXCLUDED_ROLES,
+  SUPER_ADMIN_ROLE,
+  isProtectedRole,
+  isTopLevelRole,
+} from '@/lib/roles';
 
 // ═══════════════════════════════════════════════════════════════
 // EXECUTIVE COMMAND CENTER — v2.0  (Full System + Tested)
-// Chairman → CEO → C-Suite Directive Governance Platform
+// Super Admin / CEO → C-Suite Directive Governance Platform
 // ═══════════════════════════════════════════════════════════════
 
 // ─────────────────────────────────────────────
@@ -42,8 +49,8 @@ const PRIORITY_META = {
 };
 
 const ROLE_CONFIG = {
-  Chairman: { level:1, color:"#c9a227", bg:"#c9a22718", canViewAll:true,  canCreate:true,  canManageUsers:true,  canArchive:true,  canAudit:true,  depts:["all"] },
-  CEO:      { level:2, color:"#e84393", bg:"#e8439318", canViewAll:true,  canCreate:true,  canManageUsers:false, canArchive:true,  canAudit:true,  depts:["all"] },
+  [SUPER_ADMIN_ROLE]: { level:1, color:"#e84393", bg:"#e8439318", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
+  [CEO_ROLE]:         { level:1, color:"#c9a227", bg:"#c9a22718", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
   CFO:      { level:3, color:"#3b82f6", bg:"#3b82f618", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Finance"] },
   CSO:      { level:3, color:"#a78bfa", bg:"#a78bfa18", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Strategy"] },
   CISO:     { level:3, color:"#06b6d4", bg:"#06b6d418", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Investment"] },
@@ -347,10 +354,14 @@ const Login = ({ onLogin }) => {
     setLoading(false);
   };
 
-  const DEMOS = ["chairman","ceo","cfo","coo","cso","clo"].map(r=>({
-    role:r.toUpperCase()==="CSO"?"CSO":r.toUpperCase()==="CLO"?"CLO":r.charAt(0).toUpperCase()+r.slice(1),
-    email:`${r}@ardcity.com`
-  }));
+  const DEMOS = [
+    { role: CEO_ROLE, email: 'chairman@ardcity.com' },
+    { role: SUPER_ADMIN_ROLE, email: 'ceo@ardcity.com' },
+    { role: 'CFO', email: 'cfo@ardcity.com' },
+    { role: 'COO', email: 'coo@ardcity.com' },
+    { role: 'CSO', email: 'cso@ardcity.com' },
+    { role: 'CLO', email: 'clo@ardcity.com' },
+  ];
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:16, position:"relative", overflow:"hidden" }}>
@@ -395,8 +406,8 @@ const Login = ({ onLogin }) => {
   );
 };
 
-// ── CHAIRMAN DASHBOARD ────────────────────────
-const ChairmanDash = ({ directives, users, departments, onPick }) => {
+// ── LEADERSHIP DASHBOARD ──────────────────────
+const LeadershipDash = ({ currentUser, directives, users, departments, onPick }) => {
   const total     = directives.length;
   const active    = directives.filter(d=>!["Completed","Archived"].includes(d.status)).length;
   const completed = directives.filter(d=>d.status==="Completed").length;
@@ -422,7 +433,7 @@ const ChairmanDash = ({ directives, users, departments, onPick }) => {
 
   return (
     <div>
-      <h2 style={{ margin:"0 0 4px", fontSize:20, fontWeight:900, color:C.text, fontFamily:"'Georgia',serif" }}>Chairman Overview</h2>
+      <h2 style={{ margin:"0 0 4px", fontSize:20, fontWeight:900, color:C.text, fontFamily:"'Georgia',serif" }}>{currentUser.role} Overview</h2>
       <p style={{ margin:"0 0 22px", color:C.textSub, fontSize:13 }}>Full system visibility · {fmt(new Date())}</p>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:22 }}>
@@ -476,32 +487,6 @@ const ChairmanDash = ({ directives, users, departments, onPick }) => {
       {directives.filter(d=>!["Completed","Archived"].includes(d.status)).map(d=>(
         <DRow key={d.directive_id} d={d} users={users} onClick={()=>onPick(d)} compact />
       ))}
-    </div>
-  );
-};
-
-// ── CEO DASHBOARD ─────────────────────────────
-const CEODash = ({ directives, users, onPick }) => {
-  const pendReview = directives.filter(d=>d.status==="Review");
-  const overdue    = directives.filter(d=>d.status==="Overdue");
-  return (
-    <div>
-      <h2 style={{ margin:"0 0 4px", fontSize:20, fontWeight:900, color:C.text, fontFamily:"'Georgia',serif" }}>CEO Overview</h2>
-      <p style={{ margin:"0 0 22px", color:C.textSub, fontSize:13 }}>All directives · Execution visibility</p>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:22 }}>
-        <KPI label="From Chairman" value={directives.filter(d=>d.issued_by==="U001").length} icon="📥" color={C.gold} />
-        <KPI label="Delegated"     value={directives.filter(d=>d.assigned_to==="U002"&&d.delegated_to!=="U002").length} icon="📤" color={C.blue} />
-        <KPI label="Pending Review" value={pendReview.length} icon="👁️" color={C.yellow} />
-        <KPI label="Overdue"       value={overdue.length} icon="⚠️" color={C.red} />
-      </div>
-      {pendReview.length>0&&(
-        <div style={{ marginBottom:18 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.yellow, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>⚡ Awaiting Your Review</div>
-          {pendReview.map(d=><DRow key={d.directive_id} d={d} users={users} onClick={()=>onPick(d)} />)}
-        </div>
-      )}
-      <div style={{ fontSize:11, fontWeight:700, color:C.gold, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>All Directives</div>
-      {directives.map(d=><DRow key={d.directive_id} d={d} users={users} onClick={()=>onPick(d)} compact />)}
     </div>
   );
 };
@@ -605,7 +590,7 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onDelet
     fetch(`/api/tasks/${taskId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status:newStatus, progress:newProgress }) }).catch(console.error);
   };
 
-  const deptUsers = users.filter(u=>u.dept===d.dept||["Chairman","CEO"].includes(u.role));
+  const deptUsers = users.filter(u=>u.dept===d.dept||isTopLevelRole(u.role));
 
   const deleteDirective = async () => {
     if (!canDelete || deleting) return;
@@ -930,7 +915,7 @@ const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCan
     .filter(u => u.user_id !== "System" && u.status === "Active" && (!assignRole || u.role === assignRole))
     .map(u => ({ value: u.user_id, label: `${u.name} (${u.role})` }));
 
-  const ceoUserId = users.find(u => u.role === "CEO" && u.status === "Active")?.user_id || "";
+  const ceoUserId = users.find(u => u.role === CEO_ROLE && u.status === "Active")?.user_id || "";
 
   const defaultDept = departments.includes('Finance')
     ? 'Finance'
@@ -958,7 +943,7 @@ const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCan
       u.status === 'Active' &&
       u.dept === form.dept &&
       u.user_id !== 'System' &&
-      !['Chairman', 'CEO', 'Director', 'Team'].includes(u.role)
+      !DEPARTMENT_EXECUTIVE_EXCLUDED_ROLES.includes(u.role)
     )?.user_id;
 
     onSave({
@@ -1093,7 +1078,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
   const [editingDeptName, setEditingDeptName] = useState('');
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  const isChairman = currentUser.role==="Chairman";
+  const canManageUsers = (ROLE_CONFIG[currentUser.role] || ROLE_CONFIG.Team).canManageUsers;
 
   const visible = users.filter(u=>{
     if (search&&!u.name.toLowerCase().includes(search.toLowerCase())&&!u.email.toLowerCase().includes(search.toLowerCase())) return false;
@@ -1292,10 +1277,10 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
             {users.length} users · {users.filter(u=>u.status==="Active").length} active · {users.filter(u=>u.status==="Suspended").length} suspended
           </p>
         </div>
-        {isChairman&&<Btn onClick={openAdd} icon="＋">Add User</Btn>}
+        {canManageUsers&&<Btn onClick={openAdd} icon="＋">Add User</Btn>}
       </div>
 
-      {isChairman && (
+      {canManageUsers && (
         <Card style={{ marginBottom: 14 }}>
           <div style={{ display:'flex', gap:8, marginBottom:12 }}>
             <button onClick={()=>setMetaTab('roles')} style={{ background:metaTab==='roles'?C.goldDim:C.surfaceAlt, border:`1px solid ${metaTab==='roles'?C.goldBorder:C.border}`, color:metaTab==='roles'?C.gold:C.textSub, borderRadius:7, padding:'6px 10px', fontSize:12, cursor:'pointer' }}>Roles</button>
@@ -1310,7 +1295,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
               </div>
               {roleItems.map(item=>{
                 const roleUsage = users.filter(u => u.role === item.name).length;
-                const isCoreRole = item.name === 'Chairman';
+                const isCoreRole = isProtectedRole(item.name);
                 const isEditing = editingRoleId === item.id;
                 return (
                   <div key={item.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
@@ -1327,7 +1312,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
                       </>
                     ) : (
                       <>
-                        <Btn small variant="ghost" onClick={()=>startEditRole(item)}>Edit</Btn>
+                        <Btn small variant="ghost" onClick={()=>startEditRole(item)} disabled={isCoreRole}>Edit</Btn>
                         <Btn small variant="danger" onClick={()=>removeRole(item)} disabled={isCoreRole}>Delete</Btn>
                       </>
                     )}
@@ -1390,7 +1375,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
         : visible.map(u=>{
           const rc = ROLE_CONFIG[u.role]||ROLE_CONFIG.Team;
           const isSelf = u.user_id===currentUser.user_id;
-          const isProtected = ["Chairman"].includes(u.role)&&!isSelf;
+          const isProtected = isProtectedRole(u.role)&&!isSelf;
           return (
             <Card key={u.user_id} style={{ padding:"14px 16px", marginBottom:7, opacity:u.status==="Suspended"?.65:1 }}>
               <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
@@ -1411,7 +1396,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
                   <Tag color={C.blue}>{u.dept}</Tag>
                   <Tag color={u.status==="Active"?C.green:u.status==="Suspended"?C.red:C.textMuted}>{u.status}</Tag>
                 </div>
-                {isChairman&&(
+                {canManageUsers&&(
                   <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                     <Btn variant="ghost" small onClick={()=>openEdit(u)} icon="✏️">Edit</Btn>
                     {!isSelf&&(
@@ -1440,7 +1425,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} placeholder="+92-300-0000000" />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
-              options={roles.filter(r => r !== 'Chairman')} />
+              options={roles} />
             <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select"
               options={departments} />
           </div>
@@ -1457,7 +1442,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
         <Modal title={`Edit — ${target.name}`} onClose={closeModal}>
           {target.user_id===currentUser.user_id&&(
             <div style={{ background:C.surfaceAlt, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", fontSize:11, color:C.textSub, marginBottom:12 }}>
-              You are editing your own chairman profile. Role, department, and status are locked.
+              You are editing your own administrator profile. Role, department, and status are locked.
             </div>
           )}
           <div style={{ display:"flex", gap:10, alignItems:"center", padding:"10px 14px", background:C.surfaceAlt, borderRadius:8, marginBottom:16, border:`1px solid ${C.border}` }}>
@@ -1473,7 +1458,7 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
           <Field label="Phone"      value={form.phone}  onChange={v=>f("phone",v)} />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Field label="Role" value={form.role} onChange={v=>f("role",v)} as="select"
-              options={roles.filter(r => r !== 'Chairman')} disabled={target.user_id===currentUser.user_id} />
+              options={roles} disabled={target.user_id===currentUser.user_id} />
             <Field label="Department" value={form.dept} onChange={v=>f("dept",v)} as="select"
               options={departments} disabled={target.user_id===currentUser.user_id} />
           </div>
@@ -1637,7 +1622,13 @@ export default function ECCApp() {
       const res = await fetch('/api/data');
       if (res.ok) {
         const data = await res.json();
-        setUsers(data.users.filter(u => u.user_id !== 'System'));
+        const activeUsers = data.users.filter(u => u.user_id !== 'System');
+        setUsers(activeUsers);
+        setUser(prev => {
+          if (!prev) return prev;
+          const freshUser = activeUsers.find(u => u.user_id === prev.user_id);
+          return freshUser ? { ...prev, ...freshUser } : prev;
+        });
         setDirectives(data.directives);
         setNotifs(data.notifications);
         setAuditLog(data.auditLog);
@@ -1893,8 +1884,17 @@ export default function ECCApp() {
     }
   }, [loadData]);
 
+  useEffect(() => {
+    if (!user || !authToken) return;
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token: authToken }));
+    } catch (error) {
+      console.error('Could not sync session:', error);
+    }
+  }, [user, authToken]);
+
   const handleLogin = async (u) => {
-    if (u.status==="Suspended") { alert("Your account has been suspended. Contact the Chairman."); return; }
+    if (u.status==="Suspended") { alert("Your account has been suspended. Contact an administrator."); return; }
     const { token, ...safeUser } = u;
 
     if (!token) {
@@ -2005,8 +2005,7 @@ export default function ECCApp() {
     if (view==="users")
       return <Users users={users} directives={directives} roles={roles} roleItems={roleItems} departments={departments} departmentItems={departmentItems} currentUser={user} onUpdateUsers={setUsers} onAddRole={addRole} onUpdateRole={updateRole} onDeleteRole={deleteRole} onAddDepartment={addDepartment} onUpdateDepartment={updateDepartment} onDeleteDepartment={deleteDepartment} logAction={logAction} toast={showToast} />;
     // dashboards
-    if (user.role==="Chairman") return <ChairmanDash directives={directives} users={users} departments={departments} onPick={pickDirective} />;
-    if (user.role==="CEO")      return <CEODash directives={directives} users={users} onPick={pickDirective} />;
+    if (isTopLevelRole(user.role)) return <LeadershipDash currentUser={user} directives={directives} users={users} departments={departments} onPick={pickDirective} />;
     return <ExecDash currentUser={user} directives={directives} users={users} onPick={pickDirective} />;
   };
 

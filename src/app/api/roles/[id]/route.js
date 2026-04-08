@@ -6,6 +6,7 @@ function getStatusByCode(code) {
   if (code === 'VALIDATION') return 400;
   if (code === 'CONFLICT') return 409;
   if (code === 'IN_USE') return 409;
+  if (code === 'PROTECTED') return 409;
   return 500;
 }
 

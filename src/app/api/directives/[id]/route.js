@@ -1,4 +1,5 @@
 import sql from '@/lib/db';
+import { isTopLevelRole } from '@/lib/roles';
 import { getBearerToken, verifyAuthToken } from '@/lib/session';
 import { NextResponse } from 'next/server';
 
@@ -55,17 +56,12 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: 'Directive not found' }, { status: 404 });
     }
 
-    const requesterRole = (requesterRows[0].role || '').toLowerCase();
-    const issuerRole = (directiveRows[0].issued_by_role || '').toLowerCase();
-
-    const isChairman = requesterRole === 'chairman';
-    const isCEO = requesterRole === 'ceo';
+    const requesterRole = requesterRows[0].role || '';
 
     // Rules:
-    // - Chairman can delete any directive.
-    // - CEO can delete any directive except those issued by Chairman.
+    // - Super Admin and CEO have full directive deletion access.
     // - Everyone else cannot delete directives.
-    if (!isChairman && !(isCEO && issuerRole !== 'chairman')) {
+    if (!isTopLevelRole(requesterRole)) {
       return NextResponse.json({ error: 'Not authorized to delete this directive' }, { status: 403 });
     }
 

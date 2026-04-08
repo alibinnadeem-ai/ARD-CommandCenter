@@ -1,7 +1,7 @@
 {
   "name": "executive-command-center",
   "version": "1.0.0",
-  "description": "Executive Command Center — Chairman to C-Suite Directive Governance Platform",
+  "description": "Executive Command Center — Super Admin / CEO to C-Suite Directive Governance Platform",
   "private": true,
   "scripts": {
     "dev": "next dev",

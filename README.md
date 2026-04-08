@@ -1,8 +1,8 @@
 # ⚡ Executive Command Center (ECC)
 
-> Chairman → CEO → C-Suite Directive Governance Platform
+> Super Admin / CEO → C-Suite Directive Governance Platform
 
-A mobile-first, role-based directive governance system for executive leadership. Issues directives from the Chairman level, cascades through C-Suite, tracks execution with full audit trails.
+A mobile-first, role-based directive governance system for executive leadership. Issues directives from the top leadership level, cascades through C-Suite, tracks execution with full audit trails.
 
 ---
 
@@ -27,8 +27,8 @@ Open [http://localhost:3000](http://localhost:3000)
 
 | Role      | Email                  | Password |
 |-----------|------------------------|----------|
-| Chairman  | chairman@ardcity.com       | demo     |
-| CEO       | ceo@ardcity.com            | demo     |
+| CEO       | chairman@ardcity.com       | demo     |
+| Super Admin | ceo@ardcity.com         | demo     |
 | CFO       | cfo@ardcity.com            | demo     |
 | COO       | coo@ardcity.com            | demo     |
 | CSO       | cso@ardcity.com            | demo     |
@@ -169,12 +169,12 @@ The app is PWA-ready. To install:
 
 | Role      | View All | Create | Manage Users | Audit Log |
 |-----------|----------|--------|--------------|-----------|
-| Chairman  | ✅       | ✅     | ✅ (full)    | ✅        |
-| CEO       | ✅       | ✅     | ❌           | ✅        |
+| Super Admin | ✅     | ✅     | ✅ (full)    | ✅        |
+| CEO       | ✅       | ✅     | ✅ (full)    | ✅        |
 | CFO/COO…  | Dept only| ❌     | ❌           | ❌        |
 | Director  | Dept only| ❌     | ❌           | ❌        |
 
-**Chairman user management powers:**
+**Top-level user management powers:**
 - Add users (all roles/departments)
 - Edit user name, email, phone, role, department
 - Suspend / Reinstate accounts
