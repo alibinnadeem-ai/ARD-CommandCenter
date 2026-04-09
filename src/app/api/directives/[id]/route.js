@@ -59,7 +59,7 @@ export async function DELETE(request, { params }) {
     const requesterRole = requesterRows[0].role || '';
 
     // Rules:
-    // - Super Admin and CEO have full directive deletion access.
+    // - Top-level roles (Super Admin, Chairman, CEO) have full directive deletion access.
     // - Everyone else cannot delete directives.
     if (!isTopLevelRole(requesterRole)) {
       return NextResponse.json({ error: 'Not authorized to delete this directive' }, { status: 403 });

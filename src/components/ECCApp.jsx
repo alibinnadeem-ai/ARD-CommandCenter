@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
+  CHAIRMAN_ROLE,
   CEO_ROLE,
   DEPARTMENT_EXECUTIVE_EXCLUDED_ROLES,
   SUPER_ADMIN_ROLE,
@@ -48,9 +49,12 @@ const PRIORITY_META = {
   "Low":    { color: "#22c55e", bg: "#0d2218", dot: "#22c55e" },
 };
 
+const EXECUTIVE_ROLE_CONFIG = { level:1, color:"#c9a227", bg:"#c9a22718", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] };
+
 const ROLE_CONFIG = {
   [SUPER_ADMIN_ROLE]: { level:1, color:"#e84393", bg:"#e8439318", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
-  [CEO_ROLE]:         { level:1, color:"#c9a227", bg:"#c9a22718", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
+  [CHAIRMAN_ROLE]:    EXECUTIVE_ROLE_CONFIG,
+  [CEO_ROLE]:         EXECUTIVE_ROLE_CONFIG,
   CFO:      { level:3, color:"#3b82f6", bg:"#3b82f618", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Finance"] },
   CSO:      { level:3, color:"#a78bfa", bg:"#a78bfa18", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Strategy"] },
   CISO:     { level:3, color:"#06b6d4", bg:"#06b6d418", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Investment"] },
@@ -59,6 +63,8 @@ const ROLE_CONFIG = {
   Director: { level:4, color:"#94a3b8", bg:"#94a3b818", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["own"] },
   Team:     { level:5, color:"#64748b", bg:"#64748b18", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["own"] },
 };
+
+const USER_LIST_TOP_ROLE_ORDER = [CHAIRMAN_ROLE, CEO_ROLE, SUPER_ADMIN_ROLE];
 
 const STATUS_FLOW = {
   "New": ["Assigned"],
@@ -355,12 +361,12 @@ const Login = ({ onLogin }) => {
   };
 
   const DEMOS = [
-    { role: CEO_ROLE, email: 'chairman@ardcity.com' },
-    { role: SUPER_ADMIN_ROLE, email: 'ceo@ardcity.com' },
-    { role: 'CFO', email: 'cfo@ardcity.com' },
-    { role: 'COO', email: 'coo@ardcity.com' },
-    { role: 'CSO', email: 'cso@ardcity.com' },
-    { role: 'CLO', email: 'clo@ardcity.com' },
+    { role: CHAIRMAN_ROLE, email: 'chairman@ardcity.com', password: 'qwerty' },
+    { role: SUPER_ADMIN_ROLE, email: 'ceo@ardcity.com', password: 'demo' },
+    { role: 'CFO', email: 'cfo@ardcity.com', password: 'demo' },
+    { role: 'COO', email: 'coo@ardcity.com', password: 'demo' },
+    { role: 'CSO', email: 'cso@ardcity.com', password: 'demo' },
+    { role: 'CLO', email: 'clo@ardcity.com', password: 'demo' },
   ];
 
   return (
@@ -389,7 +395,7 @@ const Login = ({ onLogin }) => {
           <div style={{ fontSize:10, color:C.textMuted, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>Quick Demo Access</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
             {DEMOS.map(d=>(
-              <button key={d.role} onClick={()=>{setEmail(d.email);setPass("demo");}} style={{
+              <button key={d.role} onClick={()=>{setEmail(d.email);setPass(d.password);}} style={{
                 background:C.surfaceAlt, border:`1px solid ${C.border}`, color:C.textSub,
                 padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontWeight:600,
                 transition:"border-color .15s"
@@ -399,7 +405,7 @@ const Login = ({ onLogin }) => {
               >{d.role}</button>
             ))}
           </div>
-          <div style={{ fontSize:10, color:C.textMuted, marginTop:7 }}>Click a role to prefill → Sign In with password demo</div>
+          <div style={{ fontSize:10, color:C.textMuted, marginTop:7 }}>Click a role to prefill credentials. Chairman uses qwerty; the other demos use demo.</div>
         </Card>
       </div>
     </div>
@@ -531,9 +537,7 @@ const Detail = ({ d: initD, users, currentUser, allDirectives, onUpdate, onDelet
 
   const rc     = ROLE_CONFIG[currentUser.role];
   const canEdit = rc?.canViewAll || d.delegated_to===currentUser.user_id || d.assigned_to===currentUser.user_id;
-  const issuerRole = (byId(users, d.issued_by)?.role || '').toLowerCase();
-  const currentRole = (currentUser.role || '').toLowerCase();
-  const canDelete = currentRole === 'chairman' || (currentRole === 'ceo' && issuerRole !== 'chairman');
+  const canDelete = isTopLevelRole(currentUser.role);
   const nexts  = STATUS_FLOW[d.status] || [];
   const days   = daysLeft(d.deadline);
 
@@ -915,13 +919,16 @@ const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCan
     .filter(u => u.user_id !== "System" && u.status === "Active" && (!assignRole || u.role === assignRole))
     .map(u => ({ value: u.user_id, label: `${u.name} (${u.role})` }));
 
-  const ceoUserId = users.find(u => u.role === CEO_ROLE && u.status === "Active")?.user_id || "";
+  const executiveUserId =
+    users.find(u => u.role === CEO_ROLE && u.status === "Active")?.user_id ||
+    users.find(u => u.role === CHAIRMAN_ROLE && u.status === "Active")?.user_id ||
+    "";
 
   const defaultDept = departments.includes('Finance')
     ? 'Finance'
     : (departments[0] || 'Executive');
 
-  const [form, setForm] = useState({ title:"", description:"", assigned_to:ceoUserId, dept:defaultDept, priority:"Medium", deadline:"" });
+  const [form, setForm] = useState({ title:"", description:"", assigned_to:executiveUserId, dept:defaultDept, priority:"Medium", deadline:"" });
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
   useEffect(() => {
@@ -945,12 +952,14 @@ const CreateDirective = ({ users, roles, departments, currentUser, onSave, onCan
       u.user_id !== 'System' &&
       !DEPARTMENT_EXECUTIVE_EXCLUDED_ROLES.includes(u.role)
     )?.user_id;
+    const assignee = users.find(u => u.user_id === form.assigned_to);
+    const shouldAutoDelegate = [CHAIRMAN_ROLE, CEO_ROLE].includes(assignee?.role);
 
     onSave({
       directive_id:"DIR-2026-"+String(Math.floor(Math.random()*900+100)),
       ...form, title:form.title.trim(), description:form.description.trim(),
       issued_by:currentUser.user_id,
-      delegated_to:form.assigned_to===ceoUserId?(deptExec||form.assigned_to):form.assigned_to,
+      delegated_to:shouldAutoDelegate ? (deptExec || form.assigned_to) : form.assigned_to,
       status:"New", progress:0,
       created:new Date().toISOString(),
       tasks:[], comments:[], attachments:[],
@@ -1086,6 +1095,17 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
     if (filterStatus&&u.status!==filterStatus) return false;
     return true;
   });
+
+  const topRoleRank = new Map(USER_LIST_TOP_ROLE_ORDER.map((role, index) => [role, index]));
+  const sortedVisible = visible
+    .map((user, index) => ({ user, index }))
+    .sort((a, b) => {
+      const aRank = topRoleRank.has(a.user.role) ? topRoleRank.get(a.user.role) : Number.MAX_SAFE_INTEGER;
+      const bRank = topRoleRank.has(b.user.role) ? topRoleRank.get(b.user.role) : Number.MAX_SAFE_INTEGER;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.index - b.index;
+    })
+    .map(({ user }) => user);
 
   const openAdd = () => {
     setTarget(null);
@@ -1370,9 +1390,9 @@ const Users = ({ users, directives, roles, roleItems, departments, departmentIte
         </select>
       </div>
 
-      {visible.length===0
+      {sortedVisible.length===0
         ? <Card style={{ textAlign:"center", padding:40 }}><div style={{ fontSize:28, marginBottom:8 }}>👥</div><div style={{ color:C.textSub }}>No users match search</div></Card>
-        : visible.map(u=>{
+        : sortedVisible.map(u=>{
           const rc = ROLE_CONFIG[u.role]||ROLE_CONFIG.Team;
           const isSelf = u.user_id===currentUser.user_id;
           const isProtected = isProtectedRole(u.role)&&!isSelf;

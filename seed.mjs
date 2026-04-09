@@ -5,7 +5,7 @@ const sql = neon(DATABASE_URL);
 
 // ── SEED DATA ──
 const USERS = [
-  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ardcity.com", password:"demo", role:"CEO",         dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
+  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ardcity.com", password:"qwerty", role:"Chairman",    dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
   { user_id:"U002", name:"Dr. Nadia Qureshi",         email:"ceo@ardcity.com",      password:"demo", role:"Super Admin", dept:"Executive", status:"Active", joined:"2020-03-15", phone:"+92-300-0000002" },
   { user_id:"U003", name:"Ahmed Al-Farsi",            email:"cfo@ardcity.com",      password:"demo", role:"CFO",      dept:"Finance",   status:"Active", joined:"2021-01-10", phone:"+92-300-0000003" },
   { user_id:"U004", name:"Priya Sharma",              email:"cso@ardcity.com",      password:"demo", role:"CSO",      dept:"Strategy",  status:"Active", joined:"2021-04-20", phone:"+92-300-0000004" },

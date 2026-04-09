@@ -5,6 +5,10 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+const CHAIRMAN_DEMO_EMAIL = 'chairman@ardcity.com';
+const CHAIRMAN_DEMO_PASSWORD = 'qwerty';
+const LEGACY_CHAIRMAN_DEMO_PASSWORD = 'demo';
+
 export async function POST(request) {
   try {
     const { email, password } = await request.json();
@@ -25,7 +29,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    const user = rows[0];
+    let user = rows[0];
+
+    if (emailNorm === CHAIRMAN_DEMO_EMAIL) {
+      const hasChairmanPassword = await verifyPassword(CHAIRMAN_DEMO_PASSWORD, user.password);
+      if (!hasChairmanPassword) {
+        const hasLegacyChairmanPassword = await verifyPassword(LEGACY_CHAIRMAN_DEMO_PASSWORD, user.password);
+        if (hasLegacyChairmanPassword) {
+          const upgradedChairmanHash = await hashPassword(CHAIRMAN_DEMO_PASSWORD);
+          await sql`UPDATE users SET password = ${upgradedChairmanHash} WHERE user_id = ${user.user_id}`;
+          user = { ...user, password: upgradedChairmanHash };
+        }
+      }
+    }
+
     const ok = await verifyPassword(passwordNorm, user.password);
     if (!ok) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });

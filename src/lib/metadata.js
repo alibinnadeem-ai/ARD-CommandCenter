@@ -1,8 +1,8 @@
 import sql from '@/lib/db';
 import {
+  CHAIRMAN_ROLE,
   CEO_ROLE,
   DEFAULT_ROLE_ORDER,
-  LEGACY_CHAIRMAN_ROLE,
   SUPER_ADMIN_ROLE,
   isProtectedRole,
 } from '@/lib/roles';
@@ -55,19 +55,37 @@ function sortByDefaults(items, defaults) {
 }
 
 async function migrateLegacyTopRoles() {
-  const [legacyChairmanUsers, legacyChairmanRoleRows] = await Promise.all([
-    sql`SELECT 1 FROM users WHERE role = ${LEGACY_CHAIRMAN_ROLE} LIMIT 1`,
-    sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`,
+  const [
+    legacyChairmanUsers,
+    legacyChairmanRoleRows,
+    superAdminUsers,
+    superAdminRoleRows,
+  ] = await Promise.all([
+    sql`SELECT 1 FROM users WHERE role = ${CHAIRMAN_ROLE} LIMIT 1`,
+    sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${CHAIRMAN_ROLE})`,
+    sql`SELECT 1 FROM users WHERE role = ${SUPER_ADMIN_ROLE} LIMIT 1`,
+    sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${SUPER_ADMIN_ROLE})`,
   ]);
 
+  // Older builds used Chairman/CEO as the only top roles. Only run that role swap
+  // when no Super Admin data exists so current Chairman users keep their new tag.
+  const hasLegacyTopRoleState =
+    (legacyChairmanUsers.length > 0 || legacyChairmanRoleRows.length > 0) &&
+    superAdminUsers.length === 0 &&
+    superAdminRoleRows.length === 0;
+
+  if (!hasLegacyTopRoleState) {
+    return;
+  }
+
   if (legacyChairmanUsers.length > 0) {
-    await sql`UPDATE users SET role = ${LEGACY_CHAIRMAN_TEMP_ROLE}, updated_at = NOW() WHERE role = ${LEGACY_CHAIRMAN_ROLE}`;
+    await sql`UPDATE users SET role = ${LEGACY_CHAIRMAN_TEMP_ROLE}, updated_at = NOW() WHERE role = ${CHAIRMAN_ROLE}`;
     await sql`UPDATE users SET role = ${SUPER_ADMIN_ROLE}, updated_at = NOW() WHERE role = ${CEO_ROLE}`;
     await sql`UPDATE users SET role = ${CEO_ROLE}, updated_at = NOW() WHERE role = ${LEGACY_CHAIRMAN_TEMP_ROLE}`;
   }
 
   if (legacyChairmanRoleRows.length > 0) {
-    await sql`UPDATE roles SET name = ${LEGACY_CHAIRMAN_TEMP_ROLE} WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`;
+    await sql`UPDATE roles SET name = ${LEGACY_CHAIRMAN_TEMP_ROLE} WHERE LOWER(name) = LOWER(${CHAIRMAN_ROLE})`;
 
     const superAdminRows = await sql`SELECT id FROM roles WHERE LOWER(name) = LOWER(${SUPER_ADMIN_ROLE})`;
     if (superAdminRows.length > 0) {
@@ -84,9 +102,19 @@ async function migrateLegacyTopRoles() {
     }
   }
 
-  await sql`DELETE FROM roles WHERE LOWER(name) = LOWER(${LEGACY_CHAIRMAN_ROLE})`;
-  await addRoleInternal(SUPER_ADMIN_ROLE);
-  await addRoleInternal(CEO_ROLE);
+  await sql`DELETE FROM roles WHERE LOWER(name) = LOWER(${CHAIRMAN_ROLE})`;
+}
+
+async function normalizeSeedChairmanUser() {
+  const chairmanUsers = await sql`SELECT 1 FROM users WHERE role = ${CHAIRMAN_ROLE} LIMIT 1`;
+  if (chairmanUsers.length > 0) return;
+
+  await sql`
+    UPDATE users
+    SET role = ${CHAIRMAN_ROLE}, updated_at = NOW()
+    WHERE LOWER(email) = LOWER(${'chairman@ardcity.com'})
+      AND role = ${CEO_ROLE}
+  `;
 }
 
 export async function ensureMetadataTables() {
@@ -118,6 +146,8 @@ export async function ensureMetadataTables() {
   for (const dept of DEFAULT_DEPARTMENTS) {
     await addDepartmentInternal(dept);
   }
+
+  await normalizeSeedChairmanUser();
 
   const [userRoles, userDepts, directiveDepts] = await Promise.all([
     sql`SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND TRIM(role) <> ''`,

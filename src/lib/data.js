@@ -1,10 +1,22 @@
 // ═══════════════════════════════════════════════════════════════
 // ECC — Seed Data & Constants
 // ═══════════════════════════════════════════════════════════════
-import { CEO_ROLE, SUPER_ADMIN_ROLE } from '@/lib/roles';
+import { CHAIRMAN_ROLE, CEO_ROLE, SUPER_ADMIN_ROLE } from '@/lib/roles';
+
+const EXECUTIVE_ROLE_CONFIG = {
+  level: 1,
+  color: '#c9a227',
+  bg: '#c9a22718',
+  canViewAll: true,
+  canCreate: true,
+  canManageUsers: true,
+  canArchive: true,
+  canAudit: true,
+  depts: ['all'],
+};
 
 export const SEED_USERS = [
-  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ardcity.com", password:"demo", role:CEO_ROLE,         dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
+  { user_id:"U001", name:"Sheikh Khalid Al-Mansouri", email:"chairman@ardcity.com", password:"qwerty", role:CHAIRMAN_ROLE,    dept:"Executive", status:"Active", joined:"2020-01-01", phone:"+92-300-0000001" },
   { user_id:"U002", name:"Dr. Nadia Qureshi",         email:"ceo@ardcity.com",      password:"demo", role:SUPER_ADMIN_ROLE, dept:"Executive", status:"Active", joined:"2020-03-15", phone:"+92-300-0000002" },
   { user_id:"U003", name:"Ahmed Al-Farsi",            email:"cfo@ardcity.com",      password:"demo", role:"CFO",      dept:"Finance",   status:"Active", joined:"2021-01-10", phone:"+92-300-0000003" },
   { user_id:"U004", name:"Priya Sharma",              email:"cso@ardcity.com",      password:"demo", role:"CSO",      dept:"Strategy",  status:"Active", joined:"2021-04-20", phone:"+92-300-0000004" },
@@ -128,7 +140,8 @@ export const SEED_AUDIT = [
 // ─────────────────────────────────────────────
 export const ROLE_CONFIG = {
   [SUPER_ADMIN_ROLE]: { level:1, color:"#e84393", bg:"#e8439318", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
-  [CEO_ROLE]:         { level:1, color:"#c9a227", bg:"#c9a22718", canViewAll:true, canCreate:true, canManageUsers:true, canArchive:true, canAudit:true, depts:["all"] },
+  [CHAIRMAN_ROLE]:    EXECUTIVE_ROLE_CONFIG,
+  [CEO_ROLE]:         EXECUTIVE_ROLE_CONFIG,
   CFO:      { level:3, color:"#3b82f6", bg:"#3b82f618", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Finance"]    },
   CSO:      { level:3, color:"#a78bfa", bg:"#a78bfa18", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Strategy"]   },
   CISO:     { level:3, color:"#06b6d4", bg:"#06b6d418", canViewAll:false, canCreate:false, canManageUsers:false, canArchive:false, canAudit:false, depts:["Investment"] },
@@ -171,6 +184,6 @@ export const DEPT_EXEC_MAP = {
 };
 
 export const ALL_DEPTS    = ["Finance", "Strategy", "Investment", "Operations", "Legal"];
-export const ALL_ROLES    = [SUPER_ADMIN_ROLE, CEO_ROLE, "CFO", "CSO", "CISO", "COO", "CLO", "Director", "Team"];
+export const ALL_ROLES    = [SUPER_ADMIN_ROLE, CHAIRMAN_ROLE, CEO_ROLE, "CFO", "CSO", "CISO", "COO", "CLO", "Director", "Team"];
 export const ALL_STATUSES = ["New","Assigned","Accepted","In Progress","Review","Completed","Overdue","Archived"];
 export const ALL_PRIORITIES = ["High","Medium","Low"];
